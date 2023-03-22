@@ -27,6 +27,7 @@ import {
   IEditorDocumentModelContentProvider,
   EditorDocumentModelOptionChangedEvent,
   EditorDocumentModelWillSaveEvent,
+  EditorOpenType,
 } from '@opensumi/ide-editor/lib/browser';
 import { UntitledDocumentIdCounter } from '@opensumi/ide-editor/lib/browser/untitled-resource';
 import { IFileServiceClient } from '@opensumi/ide-file-service';
@@ -115,12 +116,12 @@ export class MainThreadExtensionDocumentData extends WithEventBus implements IMa
         this.docSyncEnabled.set(
           uriString,
           docRef.instance.getMonacoModel().getValueLength() <
-            (this.preference.get<number>('editor.docExtHostSyncMaxSize') || 2 * 1024 * 1024),
+            (this.preference.get<number>('editor.docExtHostSyncMaxSize') || 4 * 1024 * 1024 * 1024),
         );
         docRef.dispose();
       }
     }
-    return this.docSyncEnabled.get(uriString)!;
+    return this.docSyncEnabled.get(uriString) ?? false;
   }
 
   constructor(@Optional(Symbol()) private rpcProtocol: IRPCProtocol) {
@@ -288,7 +289,7 @@ export class MainThreadExtensionDocumentData extends WithEventBus implements IMa
           return;
         }
         results.push({
-          type: 'code',
+          type: EditorOpenType.code,
           readonly: true,
         });
       }),

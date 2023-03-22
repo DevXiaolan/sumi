@@ -1,9 +1,9 @@
 import cls from 'classnames';
-import React from 'react';
+import React, { useCallback, memo, useMemo } from 'react';
 
 import { Button, Popover, PopoverPosition, PopoverTriggerType } from '@opensumi/ide-components';
-import { getExternalIcon, IOpenerService, toMarkdown } from '@opensumi/ide-core-browser';
-import { parseLabel, LabelPart, LabelIcon, replaceLocalizePlaceholder } from '@opensumi/ide-core-browser';
+import { IOpenerService, toMarkdown, transformLabelWithCodicon } from '@opensumi/ide-core-browser';
+import { replaceLocalizePlaceholder } from '@opensumi/ide-core-browser';
 import { useInjectable } from '@opensumi/ide-core-browser/lib/react-hooks';
 import { StatusBarEntry, StatusBarHoverContent } from '@opensumi/ide-core-browser/lib/services';
 import {
@@ -12,8 +12,9 @@ import {
   CommandService,
   StatusBarHoverCommand,
   IMarkdownString,
+  isString,
 } from '@opensumi/ide-core-common';
-import { IThemeService } from '@opensumi/ide-theme';
+import { IIconService, IThemeService } from '@opensumi/ide-theme';
 
 import styles from './status-bar.module.less';
 
@@ -21,24 +22,28 @@ interface StatusBarPopoverContent {
   contents: StatusBarHoverContent[];
 }
 
-const StatusBarPopover = React.memo((props: StatusBarPopoverContent) => {
+const StatusBarPopover = memo((props: StatusBarPopoverContent) => {
   const commandService: CommandService = useInjectable(CommandService);
+  const iconService = useInjectable<IIconService>(IIconService);
   const { contents } = props;
 
-  const onClickLink = React.useCallback((command: StatusBarHoverCommand) => {
+  const onClickLink = useCallback((command?: StatusBarHoverCommand) => {
+    if (!command) {
+      return;
+    }
     commandService.executeCommand(command.id, ...(command.arguments || []));
   }, []);
 
   return (
     <div>
-      {contents.map((content) => (
-        <div key={content.title} className={styles.popover_content}>
+      {contents.map((content: StatusBarHoverContent, index: number) => (
+        <div key={`${content.title}-${index}`} className={styles.popover_content}>
           <span>
-            {content.title}
+            {content.title && transformLabelWithCodicon(content.title, {}, iconService.fromString.bind(iconService))}
             {content.name && ` - ${content.name}`}
           </span>
           {content.command && (
-            <Button type='link' title={content.command.tooltip} onClick={() => onClickLink(content.command!)}>
+            <Button type='link' title={content.command.tooltip} onClick={() => onClickLink(content.command)}>
               {content.command.title}
             </Button>
           )}
@@ -48,7 +53,7 @@ const StatusBarPopover = React.memo((props: StatusBarPopoverContent) => {
   );
 });
 
-export const StatusBarItem = React.memo((props: StatusBarEntry) => {
+export const StatusBarItem = memo((props: StatusBarEntry) => {
   const {
     entryId,
     text,
@@ -66,17 +71,24 @@ export const StatusBarItem = React.memo((props: StatusBarEntry) => {
 
   const themeService = useInjectable<IThemeService>(IThemeService);
   const openerService = useInjectable<IOpenerService>(IOpenerService);
+  const iconService = useInjectable<IIconService>(IIconService);
 
-  const disablePopover = React.useMemo(() => !tooltip && !hoverContents, [tooltip, hoverContents]);
+  const disablePopover = useMemo(() => !tooltip && !hoverContents, [tooltip, hoverContents]);
 
-  const popoverContent = React.useMemo(() => {
+  const popoverContent = useMemo(() => {
     if (hoverContents) {
       return <StatusBarPopover contents={hoverContents} />;
     }
     if (tooltip && (tooltip as IMarkdownString).value) {
       return toMarkdown((tooltip as IMarkdownString).value, openerService);
     }
-    return <div className={styles.popover_tooltip}>{tooltip}</div>;
+    return (
+      isString(tooltip) && (
+        <div className={styles.popover_tooltip}>
+          {transformLabelWithCodicon(tooltip, {}, iconService.fromString.bind(iconService))}
+        </div>
+      )
+    );
   }, [tooltip]);
 
   const getColor = (color: string | IThemeColor | undefined): string => {
@@ -91,11 +103,6 @@ export const StatusBarItem = React.memo((props: StatusBarEntry) => {
     return color;
   };
 
-  let items: LabelPart[] = [];
-  if (text) {
-    items = parseLabel(text);
-  }
-  let hasIcon = false;
   return (
     <div
       id={entryId}
@@ -110,7 +117,7 @@ export const StatusBarItem = React.memo((props: StatusBarEntry) => {
       aria-label={ariaLabel}
     >
       <Popover
-        id={entryId!}
+        id={`${entryId}-popover`}
         content={popoverContent}
         trigger={PopoverTriggerType.hover}
         delay={200}
@@ -119,33 +126,22 @@ export const StatusBarItem = React.memo((props: StatusBarEntry) => {
       >
         <div className={styles.popover_item}>
           {iconClass && <span key={-1} className={cls(styles.icon, iconClass)}></span>}
-          {items.map((item, key) => {
-            if (!(typeof item === 'string') && LabelIcon.is(item)) {
-              hasIcon = true;
-              return (
+          {text &&
+            transformLabelWithCodicon(
+              text,
+              {},
+              iconService.fromString.bind(iconService),
+              (text: string, index: number) => (
                 <span
-                  key={key}
-                  className={cls(
-                    styles.icon,
-                    getExternalIcon(item.name),
-                    `${item.animation ? 'iconfont-anim-' + item.animation : ''}`,
-                  )}
-                ></span>
-              );
-            } else {
-              // 22px高度限制用于解决文本超长时文本折叠问题
-              return (
-                <span
-                  style={{ marginLeft: iconClass || hasIcon ? '2px' : 0, height: '22px', lineHeight: '22px' }}
-                  key={key}
+                  key={`${text}-${index}`}
+                  style={{ height: '22px', lineHeight: '22px' }}
                   aria-label={ariaLabel}
                   role={role}
                 >
-                  {replaceLocalizePlaceholder(item)}
+                  {replaceLocalizePlaceholder(text)}
                 </span>
-              );
-            }
-          })}
+              ),
+            )}
         </div>
       </Popover>
     </div>

@@ -10,7 +10,12 @@ import {
   ILogger,
   match,
 } from '@opensumi/ide-core-common';
-import { EditorComponentRegistry, IEditorPriority, ReactEditorComponent } from '@opensumi/ide-editor/lib/browser';
+import {
+  EditorComponentRegistry,
+  EditorOpenType,
+  IEditorPriority,
+  ReactEditorComponent,
+} from '@opensumi/ide-editor/lib/browser';
 import { IWebviewService } from '@opensumi/ide-webview';
 import { WebviewMounter } from '@opensumi/ide-webview/lib/browser/editor-webview';
 
@@ -29,7 +34,7 @@ import { IActivationEventService } from '../../types';
 
 @Injectable()
 @Contributes('customEditors')
-@LifeCycle(LifeCyclePhase.Ready)
+@LifeCycle(LifeCyclePhase.Initialize)
 export class CustomEditorContributionPoint extends VSCodeContributePoint<CustomEditorScheme[]> {
   @Autowired(EditorComponentRegistry)
   private editorComponentRegistry: EditorComponentRegistry;
@@ -70,12 +75,6 @@ export class CustomEditorContributionPoint extends VSCodeContributePoint<CustomE
       const component = createCustomEditorComponent(customEditor.viewType, componentId, () =>
         this.getOptions(customEditor.viewType),
       );
-      this.addDispose(
-        this.editorComponentRegistry.registerEditorComponent({
-          uid: componentId,
-          component,
-        }),
-      );
 
       const patterns = customEditor.selector.map((s) => s.filenamePattern).filter((p) => typeof p === 'string');
 
@@ -94,7 +93,7 @@ export class CustomEditorContributionPoint extends VSCodeContributePoint<CustomE
               ) {
                 results.push({
                   componentId,
-                  type: 'component',
+                  type: EditorOpenType.component,
                   title: customEditor.displayName
                     ? this.getLocalizeFromNlsJSON(customEditor.displayName, extensionId)
                     : customEditor.viewType,
@@ -137,6 +136,13 @@ export class CustomEditorContributionPoint extends VSCodeContributePoint<CustomE
             }
           },
         ),
+      );
+
+      this.addDispose(
+        this.editorComponentRegistry.registerEditorComponent({
+          uid: componentId,
+          component,
+        }),
       );
     } catch (e) {
       this.logger.error(e);

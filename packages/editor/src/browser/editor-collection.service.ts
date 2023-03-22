@@ -1,6 +1,7 @@
 import { Injectable, Autowired, INJECTOR_TOKEN, Injector } from '@opensumi/di';
-import { IRange, MonacoService, IContextKeyService } from '@opensumi/ide-core-browser';
+import { IRange, IContextKeyService } from '@opensumi/ide-core-browser';
 import { ResourceContextKey } from '@opensumi/ide-core-browser/lib/contextkey';
+import { MonacoService } from '@opensumi/ide-core-browser/lib/monaco';
 import {
   ILineChange,
   URI,
@@ -10,6 +11,7 @@ import {
   ISelection,
   Disposable,
   objects,
+  isEmptyObject,
 } from '@opensumi/ide-core-common';
 import { Emitter } from '@opensumi/ide-core-common';
 import type {
@@ -142,6 +144,13 @@ export class EditorCollectionServiceImpl extends WithEventBus implements EditorC
     return editor;
   }
 
+  public createMergeEditor(dom: HTMLElement, options?: any, overrides?: { [key: string]: any }) {
+    const preferenceOptions = getConvertedMonacoOptions(this.configurationService);
+    const mergedOptions = { ...preferenceOptions.editorOptions, ...preferenceOptions.diffOptions, ...options };
+    const editor = this.monacoService.createMergeEditor(dom, mergedOptions, overrides);
+    return editor;
+  }
+
   public listDiffEditors(): IDiffEditor[] {
     return Array.from(this._diffEditors.values());
   }
@@ -176,6 +185,7 @@ export class EditorCollectionServiceImpl extends WithEventBus implements EditorC
         uri: e.payload.uri,
         decoration: {
           dirty: !!e.payload.dirty,
+          readOnly: !!e.payload.readonly,
         },
       }),
     );
@@ -212,7 +222,7 @@ function updateOptionsWithMonacoEditor(
 }
 
 @Injectable({ multiple: true })
-export abstract class BaseMonacoEditorWrapper extends Disposable implements IEditor {
+export abstract class BaseMonacoEditorWrapper extends WithEventBus implements IEditor {
   public abstract readonly currentDocumentModel: IEditorDocumentModel | null;
 
   public get currentUri(): URI | null {
@@ -261,24 +271,7 @@ export abstract class BaseMonacoEditorWrapper extends Disposable implements IEdi
   constructor(public readonly monacoEditor: IMonacoCodeEditor, private type: EditorType) {
     super();
     this.decorationApplier = this.injector.get(MonacoEditorDecorationApplier, [this.monacoEditor]);
-    this.addDispose(
-      this.monacoEditor.onDidChangeModel(() => {
-        this._editorOptionsFromContribution = {};
-        const uri = this.currentUri;
-        if (uri) {
-          Promise.resolve(this.editorFeatureRegistry.runProvideEditorOptionsForUri(uri)).then((option) => {
-            if (!this.currentUri || !uri.isEqual(this.currentUri)) {
-              return; // uri可能已经变了
-            }
-            if (option && Object.keys(option).length > 0) {
-              this._editorOptionsFromContribution = option;
-              this._doUpdateOptions();
-            }
-          });
-        }
-        this._doUpdateOptions();
-      }),
-    );
+    this.addDispose(this.monacoEditor.onDidChangeModel(this.onDidChangeModel.bind(this)));
     this.addDispose(
       this.monacoEditor.onDidChangeModelLanguage(() => {
         this._doUpdateOptions();
@@ -292,6 +285,25 @@ export abstract class BaseMonacoEditorWrapper extends Disposable implements IEdi
         }
       }),
     );
+  }
+
+  private async onDidChangeModel() {
+    this._editorOptionsFromContribution = {};
+    const uri = this.currentUri;
+    if (uri) {
+      Promise.resolve(this.editorFeatureRegistry.runProvideEditorOptionsForUri(uri)).then((options) => {
+        if (!this.currentUri || !uri.isEqual(this.currentUri)) {
+          return; // uri可能已经变了
+        }
+
+        if (options && Object.keys(options).length > 0) {
+          this._editorOptionsFromContribution = options;
+          if (!isEmptyObject(this._editorOptionsFromContribution)) {
+            this._doUpdateOptions();
+          }
+        }
+      });
+    }
   }
 
   public getType() {
@@ -490,7 +502,7 @@ export class BrowserCodeEditor extends BaseMonacoEditorWrapper implements ICodeE
     }
   }
 
-  async open(documentModelRef: IEditorDocumentModelRef): Promise<void> {
+  open(documentModelRef: IEditorDocumentModelRef): void {
     this.saveCurrentState();
     this._currentDocumentModelRef = documentModelRef;
     const model = this.currentDocumentModel!.getMonacoModel();
@@ -506,10 +518,29 @@ export class BrowserCodeEditor extends BaseMonacoEditorWrapper implements ICodeE
       position: this.monacoEditor.getPosition(),
       selectionLength: 0,
     });
+
+    const { instance } = documentModelRef;
+
+    /**
+     * 由于通过 monaco model 并不能得到该文档是否 readonly
+     * 所以这里需要对 readonly 单独设置一下
+     */
+    this.monacoEditor.updateOptions({
+      readOnly: instance.readonly,
+    });
+
+    this.eventBus.fire(
+      new ResourceDecorationNeedChangeEvent({
+        uri: instance.uri,
+        decoration: {
+          readOnly: instance.readonly,
+        },
+      }),
+    );
   }
 }
 
-export class BrowserDiffEditor extends Disposable implements IDiffEditor {
+export class BrowserDiffEditor extends WithEventBus implements IDiffEditor {
   @Autowired(EditorCollectionService)
   private collectionService: EditorCollectionServiceImpl;
 
@@ -592,9 +623,14 @@ export class BrowserDiffEditor extends Disposable implements IDiffEditor {
     this.saveCurrentState(); // 保存上一个状态
     this.originalDocModelRef = originalDocModelRef;
     this.modifiedDocModelRef = modifiedDocModelRef;
+    if (!this.originalDocModel || !this.modifiedDocModel) {
+      return;
+    }
+    const original = this.originalDocModel.getMonacoModel();
+    const modified = this.modifiedDocModel.getMonacoModel();
     this.monacoDiffEditor.setModel({
-      original: this.originalDocModel!.getMonacoModel(),
-      modified: this.modifiedDocModel!.getMonacoModel(),
+      original,
+      modified,
     });
 
     if (rawUri) {
@@ -660,13 +696,32 @@ export class BrowserDiffEditor extends Disposable implements IDiffEditor {
     await this.doUpdateDiffOptions();
   }
 
+  isReadonly(): boolean {
+    return !!this.modifiedDocModel?.readonly;
+  }
+
   private async doUpdateDiffOptions() {
     const uriStr = this.modifiedEditor.currentUri ? this.modifiedEditor.currentUri.toString() : undefined;
     const languageId = this.modifiedEditor.currentDocumentModel
       ? this.modifiedEditor.currentDocumentModel.languageId
       : undefined;
     const options = getConvertedMonacoOptions(this.configurationService, uriStr, languageId);
-    this.monacoDiffEditor.updateOptions({ ...options.diffOptions, ...this.specialOptions });
+    this.monacoDiffEditor.updateOptions({
+      ...options.diffOptions,
+      ...this.specialOptions,
+      readOnly: this.isReadonly(),
+    });
+
+    if (this.currentUri) {
+      this.eventBus.fire(
+        new ResourceDecorationNeedChangeEvent({
+          uri: this.currentUri,
+          decoration: {
+            readOnly: this.isReadonly(),
+          },
+        }),
+      );
+    }
   }
 
   updateDiffOptions(options: Partial<monaco.editor.IDiffEditorOptions>) {
@@ -684,7 +739,7 @@ export class BrowserDiffEditor extends Disposable implements IDiffEditor {
       change.originalEndLineNumber,
       change.modifiedStartLineNumber,
       change.modifiedEndLineNumber,
-      change.charChanges?.map((charChange) => ([
+      change.charChanges?.map((charChange) => [
         charChange.originalStartLineNumber,
         charChange.originalStartColumn,
         charChange.originalEndLineNumber,
@@ -693,7 +748,7 @@ export class BrowserDiffEditor extends Disposable implements IDiffEditor {
         charChange.modifiedStartColumn,
         charChange.modifiedEndLineNumber,
         charChange.modifiedEndColumn,
-      ])),
+      ]),
     ]);
   }
 

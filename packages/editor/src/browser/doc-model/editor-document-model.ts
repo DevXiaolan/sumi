@@ -23,6 +23,17 @@ import { IHashCalculateService } from '@opensumi/ide-core-common/lib/hash-calcul
 import { monaco, URI as MonacoURI } from '@opensumi/ide-monaco/lib/browser/monaco-api';
 import { EOL, EndOfLineSequence, ITextModel } from '@opensumi/ide-monaco/lib/browser/monaco-api/types';
 import { IMessageService } from '@opensumi/ide-overlay';
+import {
+  EditOperation,
+  ISingleEditOperation,
+} from '@opensumi/monaco-editor-core/esm/vs/editor/common/core/editOperation';
+import { Range } from '@opensumi/monaco-editor-core/esm/vs/editor/common/core/range';
+import {
+  ITextBuffer,
+  EndOfLinePreference,
+  DefaultEndOfLine,
+} from '@opensumi/monaco-editor-core/esm/vs/editor/common/model';
+import { createTextBuffer } from '@opensumi/monaco-editor-core/esm/vs/editor/common/model/textModel';
 
 import {
   IDocCache,
@@ -369,11 +380,12 @@ export class EditorDocumentModel extends Disposable implements IEditorDocumentMo
     }
     const task = new SaveTask(this.uri, versionId, this.monacoModel.getAlternativeVersionId(), this.getText(), force);
     this.savingTasks.push(task);
-    if (this.savingTasks.length === 1) {
+    if (this.savingTasks.length > 0) {
       this.initSave();
     }
     const res = await task.finished;
     if (res.state === SaveTaskResponseState.SUCCESS) {
+      this.monacoModel.pushStackElement();
       return true;
     } else if (res.state === SaveTaskResponseState.ERROR) {
       if (res.errorMessage !== SaveTaskErrorCause.CANCEL) {
@@ -468,24 +480,104 @@ export class EditorDocumentModel extends Disposable implements IEditorDocumentMo
   }
 
   updateContent(content: string, eol?: EOL, setPersist = false) {
-    this.monacoModel.pushEditOperations(
-      [],
-      [
-        {
-          range: this.monacoModel.getFullModelRange(),
-          text: content,
-        },
-      ],
-      () => [],
-    );
     if (eol) {
       this.eol = eol;
     }
+
+    const defaultEOL = this.eol === EOL.CRLF ? DefaultEndOfLine.CRLF : DefaultEndOfLine.LF;
+    const { textBuffer, disposable } = createTextBuffer(content, defaultEOL);
+    // 计算新旧 Monaco 文档的差异，避免全量更新导致的高亮闪烁问题
+    const singleEditOperation = EditorDocumentModel._computeEdits(this.monacoModel, textBuffer);
+    this.monacoModel.pushEditOperations([], singleEditOperation, () => []);
+
     if (setPersist) {
       this.setPersist(this.monacoModel.getAlternativeVersionId());
       this.baseContent = content;
       this.dirtyChanges = [];
     }
+    disposable.dispose();
+  }
+
+  /**
+   * Compute edits to bring `model` to the state of `textSource`.
+   */
+  public static _computeEdits(model: ITextModel, textBuffer: ITextBuffer): ISingleEditOperation[] {
+    const modelLineCount = model.getLineCount();
+    const textBufferLineCount = textBuffer.getLineCount();
+    const commonPrefix = this._commonPrefix(model, modelLineCount, 1, textBuffer, textBufferLineCount, 1);
+
+    if (modelLineCount === textBufferLineCount && commonPrefix === modelLineCount) {
+      // equality case
+      return [];
+    }
+
+    const commonSuffix = this._commonSuffix(
+      model,
+      modelLineCount - commonPrefix,
+      commonPrefix,
+      textBuffer,
+      textBufferLineCount - commonPrefix,
+      commonPrefix,
+    );
+
+    let oldRange: Range;
+    let newRange: Range;
+    if (commonSuffix > 0) {
+      oldRange = new Range(commonPrefix + 1, 1, modelLineCount - commonSuffix + 1, 1);
+      newRange = new Range(commonPrefix + 1, 1, textBufferLineCount - commonSuffix + 1, 1);
+    } else if (commonPrefix > 0) {
+      oldRange = new Range(
+        commonPrefix,
+        model.getLineMaxColumn(commonPrefix),
+        modelLineCount,
+        model.getLineMaxColumn(modelLineCount),
+      );
+      newRange = new Range(
+        commonPrefix,
+        1 + textBuffer.getLineLength(commonPrefix),
+        textBufferLineCount,
+        1 + textBuffer.getLineLength(textBufferLineCount),
+      );
+    } else {
+      oldRange = new Range(1, 1, modelLineCount, model.getLineMaxColumn(modelLineCount));
+      newRange = new Range(1, 1, textBufferLineCount, 1 + textBuffer.getLineLength(textBufferLineCount));
+    }
+
+    return [EditOperation.replaceMove(oldRange, textBuffer.getValueInRange(newRange, EndOfLinePreference.TextDefined))];
+  }
+
+  private static _commonPrefix(
+    a: ITextModel,
+    aLen: number,
+    aDelta: number,
+    b: ITextBuffer,
+    bLen: number,
+    bDelta: number,
+  ): number {
+    const maxResult = Math.min(aLen, bLen);
+
+    let result = 0;
+    for (let i = 0; i < maxResult && a.getLineContent(aDelta + i) === b.getLineContent(bDelta + i); i++) {
+      result++;
+    }
+    return result;
+  }
+
+  private static _commonSuffix(
+    a: ITextModel,
+    aLen: number,
+    aDelta: number,
+    b: ITextBuffer,
+    bLen: number,
+    bDelta: number,
+  ): number {
+    const maxResult = Math.min(aLen, bLen);
+
+    let result = 0;
+    for (let i = 0; i < maxResult && a.getLineContent(aDelta + aLen - i) === b.getLineContent(bDelta + bLen - i); i++) {
+      result++;
+    }
+    return result;
   }
 
   set baseContent(content: string) {
@@ -538,6 +630,7 @@ export class EditorDocumentModel extends Disposable implements IEditorDocumentMo
       new EditorDocumentModelContentChangedEvent({
         uri: this.uri,
         dirty: this.dirty,
+        readonly: this.readonly,
         changes,
         eol: this.eol,
         isRedoing,

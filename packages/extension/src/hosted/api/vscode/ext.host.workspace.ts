@@ -3,7 +3,7 @@ import paths from 'path';
 import type vscode from 'vscode';
 
 import { IRPCProtocol } from '@opensumi/ide-connection';
-import { CancellationToken, Emitter, Event, MessageType, path, Schemes } from '@opensumi/ide-core-common';
+import { CancellationToken, Emitter, Event, MessageType, path, Schemes, toDisposable } from '@opensumi/ide-core-common';
 import { FileStat } from '@opensumi/ide-file-service';
 
 import { WorkspaceRootsChangeEvent, IExtHostMessage } from '../../../common/vscode';
@@ -131,6 +131,8 @@ export function createWorkspaceApiFactory(
     onDidChangeNotebookDocument: Event.None,
     onDidCloseNotebookDocument: Event.None,
     notebookDocuments: [],
+    // empty handler for compatibility with the experimental API , see https://github.com/opensumi/core/issues/2424
+    registerTimelineProvider: () => toDisposable(() => {}),
   };
 
   return workspace;
@@ -458,6 +460,6 @@ export class ExtHostWorkspace implements IExtHostWorkspace {
         maxResults,
         token,
       )
-      .then((files) => files.map((file) => Uri.parse(file)));
+      .then((files) => files.map((file) => Uri.file(file)));
   }
 }

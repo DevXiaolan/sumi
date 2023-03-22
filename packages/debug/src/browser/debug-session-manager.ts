@@ -40,7 +40,6 @@ import { IVariableResolverService } from '@opensumi/ide-variable';
 
 import {
   DebugConfiguration,
-  DebugError,
   IDebugServer,
   DebugServer,
   DebugSessionOptions,
@@ -53,6 +52,7 @@ import {
   CONTEXT_IN_DEBUG_MODE_KEY,
   CONTEXT_DEBUG_TYPE_KEY,
   DebugState,
+  IDebugModelManager,
 } from '../common';
 import { IDebugProgress } from '../common/debug-progress';
 
@@ -61,7 +61,6 @@ import { DebugContextKey } from './contextkeys/debug-contextkey.service';
 import { DebugSession } from './debug-session';
 import { DebugSessionContributionRegistry } from './debug-session-contribution';
 import { isRemoteAttach } from './debugUtils';
-import { DebugModelManager } from './editor/debug-model-manager';
 import { DebugStackFrame } from './model/debug-stack-frame';
 import { DebugThread } from './model/debug-thread';
 
@@ -151,8 +150,8 @@ export class DebugSessionManager implements IDebugSessionManager {
   @Autowired(BreakpointManager)
   protected readonly breakpoints: BreakpointManager;
 
-  @Autowired(DebugModelManager)
-  protected readonly modelManager: DebugModelManager;
+  @Autowired(IDebugModelManager)
+  protected readonly modelManager: IDebugModelManager;
 
   @Autowired(ITaskService)
   protected readonly taskService: ITaskService;
@@ -345,11 +344,6 @@ export class DebugSessionManager implements IDebugSessionManager {
       }
       return this.doStart(sessionId, resolved, extra);
     } catch (e) {
-      if (DebugError.NotFound.is(e)) {
-        this.messageService.error(formatLocalize('debug.launch.typeNotSupported', e.data.type));
-        return;
-      }
-
       this.messageService.error(localize('debug.launch.catchError'));
       throw e;
     }
@@ -455,7 +449,7 @@ export class DebugSessionManager implements IDebugSessionManager {
       this.debugContextKey.contextSetVariableSupported.set(session.capabilities.supportsSetVariable ?? false);
       this.debugContextKey.contextRestartFrameSupported.set(session.capabilities.supportsRestartFrame ?? false);
       this.debugContextKey.contextDebugState.set(DebugState[session.state] as keyof typeof DebugState);
-      this.debugContextKey.contextInDdebugMode.set(state !== DebugState.Inactive);
+      this.debugContextKey.contextInDebugMode.set(state !== DebugState.Inactive);
     });
     session.on('terminated', (event) => {
       const restart = event.body && event.body.restart;
@@ -500,7 +494,7 @@ export class DebugSessionManager implements IDebugSessionManager {
     return this.start(options);
   }
   public updateCurrentSession(session: DebugSession | undefined) {
-    this.currentSession = session || this.sessions[0];
+    this.currentSession = session || this.sessions[this.sessions.length - 1];
   }
 
   get inDebugMode(): boolean {

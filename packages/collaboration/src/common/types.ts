@@ -1,4 +1,6 @@
-import { YText } from 'yjs/dist/src/internals';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import type { Text } from 'yjs';
 
 import { ICodeEditor } from '@opensumi/ide-monaco';
 
@@ -6,15 +8,17 @@ export const ICollaborationService = Symbol('ICollaborationService');
 
 export interface ICollaborationService {
   initialize(): void;
+  initFileWatch(): void;
   destroy(): void;
   undoOnFocusedTextModel(): void;
   redoOnFocusedTextModel(): void;
   registerContribution(contribution: CollaborationModuleContribution): void;
+  registerUserInfo(): void;
 }
 
 export interface ITextModelBinding {
   initialize(): void;
-  changeYText(newText: YText): void;
+  changeYText(newText: Text): void;
   undo(): void;
   redo(): void;
   addEditor(editor: ICodeEditor): void;

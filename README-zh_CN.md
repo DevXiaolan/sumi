@@ -5,6 +5,7 @@
 <div align="center">
  
 [![CI][ci-image]][ci-url]
+[![E2E][e2e-image]][e2e-url]
 [![NPM Version][npm-image]][npm-url]
 [![NPM downloads][download-image]][download-url]
 [![Test Coverage][test-image]][test-url]
@@ -14,6 +15,8 @@
 
 [ci-image]: https://github.com/opensumi/core/actions/workflows/ci.yml/badge.svg
 [ci-url]: https://github.com/opensumi/core/actions/workflows/ci.yml
+[e2e-image]: https://github.com/opensumi/core/actions/workflows/e2e.yml/badge.svg
+[e2e-url]: https://github.com/opensumi/core/actions/workflows/e2e.yml
 [discussions-image]: https://img.shields.io/badge/discussions-on%20github-blue
 [discussions-url]: https://github.com/opensumi/core/discussions
 [npm-image]: https://img.shields.io/npm/v/@opensumi/ide-core-common.svg
@@ -42,20 +45,20 @@
 由于国内网络访问的问题，部分包的下载安装都会比较缓慢，建议在开始前将你的 npm 镜像切换至国内 taobao 镜像地址，或安装一个 npm 镜像切换工具用于快速切换，如 [nrm](https://www.npmjs.com/package/nrm), 手动设置方式如下：
 
 ```bash
-$ npm config set registry https://registry.npmmirror.com
+$ yarn config set npmRegistryServer https://registry.npmmirror.com
 ```
 
 ```bash
-$ npm install
-$ npm run init
-$ npm run download-extension  # 可选
-$ npm run start
+$ yarn
+$ yarn run init
+$ yarn run download-extension  # 可选
+$ yarn run start
 ```
 
 默认情况下，框架会将项目下的 `tools/workspace` 目录作为工作区目录展现, 同时，你也可以通过下面的命令指定你要打开的工作区路径:
 
 ```bash
-$ MY_WORKSPACE={local_path} npm run start
+$ MY_WORKSPACE={local_path} yarn run start
 ```
 
 通常情况下，你可能还会遇到一些系统级别的环境依赖问题，你可以访问 [开发环境准备](./CONTRIBUTING-zh_CN.md#开发环境准备) 查看如何安装对应环境依赖。
@@ -66,7 +69,7 @@ $ MY_WORKSPACE={local_path} npm run start
 
 - [Cloud IDE](https://github.com/opensumi/ide-startup)
 - [Desktop IDE - based on the Electron](https://github.com/opensumi/ide-electron)
-- [Lite Web IDE - pure web IDE based on the Browser](https://github.com/opensumi/ide-electron)
+- [Lite Web IDE - pure web IDE based on the Browser](https://github.com/opensumi/ide-startup-lite)
 - [The Mini-App liked IDE](https://github.com/opensumi/app-desktop)
 
 ## 📕 文档
@@ -93,15 +96,15 @@ $ MY_WORKSPACE={local_path} npm run start
 
 我们建议你通过 [issues](https://github.com/opensumi/core/issues) 或 [discussions](https://github.com/opensumi/core/discussions) 与我们进行交流。
 
-如果你希望通过即时通讯工具交流，也可以通过钉钉客户端进行扫码，群号：34355491
-
-<img width="200" src="https://img.alicdn.com/imgextra/i1/O1CN01k3gCmL1HWPjLchVv7_!!6000000000765-0-tps-200-199.jpg"/>
+如果你希望通过即时通讯工具（如微信、钉钉）交流，欢迎前往我们的 [中文社区](https://opensumi.com/zh/community) 页面获取最新二维码信息。
 
 ## 📃 协议
 
 Copyright (c) 2019-present Alibaba Group Holding Limited, Ant Group Co. Ltd.
 
 本项目采用 [MIT](LICENSE) 协议。
+
+同时，该项目也包含部分基于其他开源协议下的第三方代码，详细内容请查看 [NOTICE.md](./NOTICE.md) 文件。
 
 ## ✨ 贡献者
 

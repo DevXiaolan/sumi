@@ -8,6 +8,12 @@ export interface IRef<T> {
   disposed: boolean;
 }
 
+export function normalizeFileUrl(uri: string) {
+  // 部分情况下可能出现类似 `file:///a//` 的路径，此时需要替换路径中的 `//` 为 `/`
+  // 从 `file:///a//b` 规范为 `file:///a/b`
+  return uri.replace(/\w+\/\/\w+/gi, (match) => match.replace('//', '/'));
+}
+
 export class ReferenceManager<T> {
   protected instances: Map<string, T> = new Map();
 
@@ -25,11 +31,12 @@ export class ReferenceManager<T> {
 
   constructor(private factory: (key: string) => MaybePromise<T>) {}
 
-  async getReference(key: string, reason?: string): Promise<IRef<T>> {
+  async getReference(uri: string, reason?: string): Promise<IRef<T>> {
+    const key = normalizeFileUrl(uri);
     if (!this.instances.has(key)) {
-      // 由于创建过程可能为异步，此处标注为creating， 防止重复创建。
+      // 由于创建过程可能为异步，此处标注为 creating， 防止重复创建。
       if (!this._creating.has(key)) {
-        const promise = (async (resolve) => {
+        const promise = (async () => {
           const instance = await this.factory(key);
           this.instances.set(key, instance);
           this._onInstanceCreated.fire(instance);
@@ -37,7 +44,7 @@ export class ReferenceManager<T> {
         this._creating.set(key, promise);
       }
       try {
-        await this._creating.get(key)!;
+        await this._creating.get(key);
       } catch (e) {
         // 出错时需要清除创建中状态
         this._creating.delete(key);
@@ -45,12 +52,12 @@ export class ReferenceManager<T> {
       }
     }
     const ref = this.createRef(key, reason);
-    // 需要在ref被创建后再结束creating状态，否则如果在onInstanceCreated事件中触发了removeRef至0,
-    // 可能导致instance 意外被删除。
+    // 需要在 ref 被创建后再结束 creating 状态，否则如果在 onInstanceCreated 事件中触发了 removeRef 至 0,
+    // 可能导致 instance 意外被删除。
     if (this._creating.get(key)) {
-      const creatingPromise = this._creating.get(key)!;
+      const creatingPromise = this._creating.get(key);
       this._creating.delete(key);
-      creatingPromise.then(() => {
+      creatingPromise?.then(() => {
         // 再触发一次空remove，防止被保护的instance意外残留
         this.removeRef(key, undefined);
       });

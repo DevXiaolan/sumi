@@ -239,7 +239,7 @@ export class EditorDocumentModelServiceImpl extends WithEventBus implements IEdi
   private createModel(uri: string, encoding?: string): Promise<EditorDocumentModel> {
     // 防止异步重复调用
     if (!this.creatingEditorModels.has(uri)) {
-      const promise = this.onceReady(() => this.doCreateModel(uri, encoding)).then(
+      const promise = this.doCreateModel(uri, encoding).then(
         (model) => {
           this.creatingEditorModels.delete(uri);
           return model;
@@ -259,27 +259,14 @@ export class EditorDocumentModelServiceImpl extends WithEventBus implements IEdi
     const provider = await this.contentRegistry.getProvider(uri);
 
     if (!provider) {
-      throw new Error(`未找到${uri.toString()}的文档提供商`);
+      throw new Error(`No document provider found for ${uri.toString()}`);
     }
 
-    const preferedOptions = this.preferredModelOptions.get(uri.toString());
-
-    if (!encoding && provider.provideEncoding) {
-      if (preferedOptions && preferedOptions.encoding) {
-        encoding = preferedOptions.encoding;
-      }
-    }
-
-    const preferredLanguage = preferedOptions && preferedOptions.languageId;
     const [content, readonly, languageId, eol, alwaysDirty, closeAutoSave, disposeEvenDirty] = await Promise.all([
       provider.provideEditorDocumentModelContent(uri, encoding),
       provider.isReadonly ? provider.isReadonly(uri) : undefined,
-      preferredLanguage
-        ? preferredLanguage
-        : provider.preferLanguageForUri
-        ? provider.preferLanguageForUri(uri)
-        : undefined,
-      preferedOptions?.eol || (provider.provideEOL ? provider.provideEOL(uri) : undefined),
+      provider.preferLanguageForUri ? provider.preferLanguageForUri(uri) : undefined,
+      provider.provideEOL ? provider.provideEOL(uri) : undefined,
       provider.isAlwaysDirty ? provider.isAlwaysDirty(uri) : false,
       provider.closeAutoSave ? provider.closeAutoSave(uri) : false,
       provider.disposeEvenDirty ? provider.disposeEvenDirty(uri) : false,
@@ -307,6 +294,23 @@ export class EditorDocumentModelServiceImpl extends WithEventBus implements IEdi
       },
     ]);
 
+    this.onceReady(() => {
+      if (this.preferredModelOptions.has(uri.toString())) {
+        const preferedOptions = this.preferredModelOptions.get(uri.toString());
+        if (preferedOptions?.encoding) {
+          model.updateEncoding(preferedOptions.encoding);
+        }
+
+        if (preferedOptions?.eol) {
+          model.eol = preferedOptions.eol;
+        }
+
+        if (preferedOptions?.languageId) {
+          model.languageId = preferedOptions.languageId;
+        }
+      }
+    });
+
     this.editorDocModels.set(uri.toString(), model);
     return model;
   }
@@ -323,10 +327,10 @@ export class EditorDocumentModelServiceImpl extends WithEventBus implements IEdi
     const provider = await this.contentRegistry.getProvider(uri);
 
     if (!provider) {
-      throw new Error(`未找到${uri.toString()}的文档提供商`);
+      throw new Error(`No document provider found for ${uri.toString()}`);
     }
     if (!provider.saveDocumentModel) {
-      throw new Error(`${uri.toString()}的文档提供商不存在保存方法`);
+      throw new Error(`The document provider of ${uri.toString()} does not have a save method`);
     }
 
     const result = await provider.saveDocumentModel(uri, content, baseContent, changes, encoding, ignoreDiff, eol);

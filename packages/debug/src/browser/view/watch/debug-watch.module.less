@@ -39,27 +39,16 @@
   &.mod_selected {
     color: var(--kt-tree-inactiveSelectionForeground) !important;
     background: var(--kt-tree-inactiveSelectionBackground);
-    .expansion_toggle {
-      color: var(--kt-tree-inactiveSelectionForeground) !important;
-    }
   }
 
   &.mod_focused {
     outline: 1px solid var(--list-focusOutline);
     outline-offset: -1px;
-    color: var(--kt-tree-activeSelectionForeground) !important;
-    background: var(--kt-tree-activeSelectionBackground);
-    .expansion_toggle {
-      color: var(--kt-tree-activeSelectionForeground) !important;
-    }
   }
 
   &.mod_actived {
     outline: 1px solid var(--list-focusOutline);
     outline-offset: -1px;
-    .expansion_toggle {
-      color: var(--kt-tree-activeSelectionForeground) !important;
-    }
   }
 
   &.mod_loading {
@@ -99,7 +88,7 @@
   color: inherit;
 }
 
-.debug_watch_node_display_name {
+.debug_watch_node_displayname {
   margin-right: 6px;
   display: inline;
   white-space: pre;
@@ -118,6 +107,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  color: var(--foreground);
 }
 
 .debug_watch_node_prompt_wrap {

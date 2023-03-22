@@ -1,4 +1,4 @@
-import { Injectable, Autowired, INJECTOR_TOKEN, Injector } from '@opensumi/di';
+import { Injectable, Autowired } from '@opensumi/di';
 import {
   AppConfig,
   localize,
@@ -6,8 +6,11 @@ import {
   Emitter,
   DisposableCollection,
   isMacintosh,
+  PreferenceService,
+  WithEventBus,
+  OnEvent,
 } from '@opensumi/ide-core-browser';
-import { WorkbenchEditorService } from '@opensumi/ide-editor/lib/browser';
+import { ResourceDidUpdateEvent, WorkbenchEditorService } from '@opensumi/ide-editor/lib/browser';
 import { basename, dirname, relative } from '@opensumi/ide-utils/lib/path';
 import { template } from '@opensumi/ide-utils/lib/strings';
 
@@ -24,17 +27,17 @@ if (isMacintosh) {
 }
 
 @Injectable()
-export class ElectronHeaderService implements IElectronHeaderService {
+export class ElectronHeaderService extends WithEventBus implements IElectronHeaderService {
   disposableCollection = new DisposableCollection();
 
   @Autowired(WorkbenchEditorService)
-  editorService: WorkbenchEditorService;
+  private readonly editorService: WorkbenchEditorService;
 
-  @Autowired(INJECTOR_TOKEN)
-  injector: Injector;
+  @Autowired(PreferenceService)
+  private readonly preferenceService: PreferenceService;
 
   @Autowired(AppConfig)
-  appConfig: AppConfig;
+  private readonly appConfig: AppConfig;
 
   private _onTitleChanged = new Emitter<string>();
   onTitleChanged = this._onTitleChanged.event;
@@ -59,11 +62,17 @@ export class ElectronHeaderService implements IElectronHeaderService {
   }
 
   constructor() {
+    super();
     this.disposableCollection.push(
       this.editorService.onActiveResourceChange(() => {
         this.updateAppTitle();
       }),
     );
+  }
+
+  @OnEvent(ResourceDidUpdateEvent)
+  onResourceDidUpdateEvent() {
+    this.updateAppTitle();
   }
 
   updateAppTitle() {

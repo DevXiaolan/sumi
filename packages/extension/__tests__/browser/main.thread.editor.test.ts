@@ -38,7 +38,7 @@ import { BaseFileSystemEditorDocumentProvider } from '@opensumi/ide-editor/lib/b
 import { FileSystemResourceProvider } from '@opensumi/ide-editor/lib/browser/fs-resource/fs-resource';
 import { LanguageService } from '@opensumi/ide-editor/lib/browser/language/language.service';
 import { ResourceServiceImpl } from '@opensumi/ide-editor/lib/browser/resource.service';
-import { EditorComponentRegistry } from '@opensumi/ide-editor/lib/browser/types';
+import { EditorComponentRegistry, EditorOpenType } from '@opensumi/ide-editor/lib/browser/types';
 import {
   EditorGroupChangeEvent,
   EditorVisibleChangeEvent,
@@ -59,8 +59,8 @@ import { ExtensionService } from '@opensumi/ide-extension/lib/common';
 import { ExtHostAPIIdentifier, MainThreadAPIIdentifier } from '@opensumi/ide-extension/lib/common/vscode';
 import * as TypeConverts from '@opensumi/ide-extension/lib/common/vscode/converter';
 import { ExtensionDocumentDataManagerImpl } from '@opensumi/ide-extension/lib/hosted/api/vscode/doc';
+import { MockFileServiceClient } from '@opensumi/ide-file-service/__mocks__/file-service-client';
 import { FileServiceContribution } from '@opensumi/ide-file-service/lib/browser/file-service-contribution';
-import { MockFileServiceClient } from '@opensumi/ide-file-service/lib/common/mocks';
 import { MonacoService } from '@opensumi/ide-monaco';
 import MonacoServiceImpl from '@opensumi/ide-monaco/lib/browser/monaco.service';
 import { MonacoOverrideServiceRegistryImpl } from '@opensumi/ide-monaco/lib/browser/override.service.registry';
@@ -293,9 +293,9 @@ describe('MainThreadEditor Test Suites', () => {
     const ref = await editorDocModelService.createModelReference(
       URI.file(path.join(__dirname, 'main.thread.output.test.ts')),
     );
-    await group.codeEditor.open(ref);
+    group.codeEditor.open(ref);
     const openType: IEditorOpenType = {
-      type: 'code',
+      type: EditorOpenType.code,
       componentId: 'test-v-component',
       title: 'test-file',
     };

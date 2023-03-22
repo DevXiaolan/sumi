@@ -37,6 +37,14 @@ export interface PreferenceService extends IDisposable {
   get<T>(preferenceName: string, defaultValue?: T, resourceUri?: string, overrideIdentifier?: string): T | undefined;
 
   /**
+   * 简单通过 `preferenceName` 获取到有效的配置值，防止异常数据导致逻辑问题
+   * @param preferenceName 配置名称
+   * @param defaultValue 默认值
+   */
+  getValid<T>(preferenceName: string, defaultValue: T): T;
+  getValid<T>(preferenceName: string, defaultValue?: T): T | undefined;
+
+  /**
    * 是否一个配置在指定 scope 存在针对语言的配置
    * @param preferenceName 配置名称
    * @param overrideIdentifier 语言
@@ -102,9 +110,8 @@ export interface PreferenceService extends IDisposable {
   /**
    * 都走 onPreferenceChanged 再用if判断性能太差了
    * TODO: 将只监听一个偏好的使用这个方法
-   * @param preferenceName
    */
-  onSpecificPreferenceChange(preferenceName, listener: (change: PreferenceChange) => void): IDisposable;
+  onSpecificPreferenceChange(preferenceName: string, listener: (change: PreferenceChange) => void): IDisposable;
 }
 
 export const PreferenceProviderProvider = Symbol('PreferenceProviderProvider');

@@ -1,14 +1,13 @@
 import os from 'os';
 import paths from 'path';
 
-import fileType from 'file-type';
 import * as fse from 'fs-extra';
 import trash from 'trash';
 import writeFileAtomic from 'write-file-atomic';
 
 import { Injectable, INJECTOR_TOKEN, Autowired, Injector } from '@opensumi/di';
 import { RPCService } from '@opensumi/ide-connection';
-import { Deferred, ILogService, ILogServiceManager, SupportLogNamespace } from '@opensumi/ide-core-node';
+import { Deferred, ILogService, ILogServiceManager, SupportLogNamespace, path } from '@opensumi/ide-core-node';
 import {
   isLinux,
   UriComponents,
@@ -19,11 +18,9 @@ import {
   Emitter,
   isUndefined,
   DisposableCollection,
-  isWindows,
   FileUri,
   uuid,
 } from '@opensumi/ide-core-node';
-import { Path } from '@opensumi/ide-utils/lib/path';
 
 import {
   FileChangeEvent,
@@ -37,14 +34,14 @@ import {
   IDiskFileProvider,
   FileAccess,
   FileSystemProviderCapabilities,
-  EXT_LIST_VIDEO,
-  EXT_LIST_IMAGE,
 } from '../common/';
 
-import { ParcelWatcherServer } from './file-service-watcher';
+import { FileSystemWatcherServer } from './file-service-watcher';
+import { getFileType } from './shared/file-type';
 
-const UNIX_DEFAULT_NODE_MODULES_EXCLUDE = '**/node_modules/**/*';
-const WINDOWS_DEFAULT_NODE_MODULES_EXCLUDE = '**/node_modules/*/**';
+const { Path } = path;
+const UNSUPPORTED_NODE_MODULES_EXCLUDE = '**/node_modules/*/**';
+const DEFAULT_NODE_MODULES_EXCLUDE = '**/node_modules/**';
 
 export interface IRPCDiskFileSystemProvider {
   onDidFilesChanged(event: DidFilesChangedParams): void;
@@ -61,7 +58,7 @@ export interface IWatcher {
 @Injectable({ multiple: true })
 export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvider> implements IDiskFileProvider {
   private fileChangeEmitter = new Emitter<FileChangeEvent>();
-  private watcherServer: ParcelWatcherServer;
+  private watcherServer: FileSystemWatcherServer;
   readonly onDidChangeFile: Event<FileChangeEvent> = this.fileChangeEmitter.event;
   protected watcherServerDisposeCollection: DisposableCollection;
 
@@ -78,6 +75,8 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
   private readonly loggerManager: ILogServiceManager;
 
   private logger: ILogService;
+
+  private ignoreNextChangesEvent: Set<string> = new Set();
 
   constructor() {
     super();
@@ -198,7 +197,7 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
         }
 
         if (error.code === 'EISDIR') {
-          throw FileSystemError.FileIsDirectory(uri.path, 'Error occurred while reading file: path is a directory.');
+          throw FileSystemError.FileIsADirectory(uri.path, 'Error occurred while reading file: path is a directory.');
         }
 
         if (error.code === 'EPERM') {
@@ -233,10 +232,13 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
     }
 
     try {
+      this.ignoreNextChangesEvent.add(_uri.toString());
       await writeFileAtomic(FileUri.fsPath(new URI(_uri)), buffer);
     } catch (e) {
-      this.logger.warn('writeFileAtomicSync 出错，使用 fs', e);
       await fse.writeFile(FileUri.fsPath(new URI(_uri)), buffer);
+      this.logger.warn('Error using writeFileAtomicSync, using fs instead.', e);
+    } finally {
+      this.ignoreNextChangesEvent.delete(_uri.toString());
     }
   }
 
@@ -327,12 +329,9 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
   // 出于通信成本的考虑，排除文件的逻辑必须放在node层（fs provider层，不同的fs实现的exclude应该不一样）
   setWatchFileExcludes(excludes: string[]) {
     let watchExcludes = excludes;
-    // 兼容 Windows 下对 node_modules 默认排除监听的逻辑
-    // 由于 files.watcherExclude 允许用户手动修改，所以只对默认值做处理
-    // 在 Windows 下将 **/node_modules/**/* 替换为 **/node_modules/*/**
-    if (isWindows && excludes.includes(UNIX_DEFAULT_NODE_MODULES_EXCLUDE)) {
-      const idx = watchExcludes.findIndex((v) => v === UNIX_DEFAULT_NODE_MODULES_EXCLUDE);
-      watchExcludes = watchExcludes.splice(idx, 1, WINDOWS_DEFAULT_NODE_MODULES_EXCLUDE);
+    if (excludes.includes(UNSUPPORTED_NODE_MODULES_EXCLUDE)) {
+      const idx = watchExcludes.findIndex((v) => v === UNSUPPORTED_NODE_MODULES_EXCLUDE);
+      watchExcludes = watchExcludes.splice(idx, 1, DEFAULT_NODE_MODULES_EXCLUDE);
     }
     // 每次调用之后都需要重新初始化 WatcherServer，保证最新的规则生效
     this.logger.log('Set watcher exclude:', watchExcludes);
@@ -356,15 +355,16 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
       this.watcherServerDisposeCollection.dispose();
     }
     this.watcherServerDisposeCollection = new DisposableCollection();
-    this.watcherServer = this.injector.get(ParcelWatcherServer, [excludes]);
+    this.watcherServer = this.injector.get(FileSystemWatcherServer, [excludes]);
     this.watcherServer.setClient({
       onDidFilesChanged: (events: DidFilesChangedParams) => {
         if (events.changes.length > 0) {
-          this.fileChangeEmitter.fire(events.changes);
+          const changes = events.changes.filter((c) => !this.ignoreNextChangesEvent.has(c.uri));
+          this.fileChangeEmitter.fire(changes);
           if (Array.isArray(this.rpcClient)) {
             this.rpcClient.forEach((client) => {
               client.onDidFilesChanged({
-                changes: events.changes,
+                changes,
               });
             });
           }
@@ -472,12 +472,12 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
     // Different types. Files <-> Directory.
     if (targetStat && sourceStat.isDirectory !== targetStat.isDirectory) {
       if (targetStat.isDirectory) {
-        throw FileSystemError.FileIsDirectory(
+        throw FileSystemError.FileIsADirectory(
           targetStat.uri,
           `Cannot move '${sourceStat.uri}' file to an existing location.`,
         );
       }
-      throw FileSystemError.FileNotDirectory(
+      throw FileSystemError.FileNotADirectory(
         targetStat.uri,
         `Cannot move '${sourceStat.uri}' directory to an existing location.`,
       );
@@ -560,6 +560,7 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
 
         return {
           ...realStatData,
+          realUri: realStatData.uri,
           type: FileType.SymbolicLink,
           isSymbolicLink: true,
           uri: uri.toString(),
@@ -630,51 +631,6 @@ export class DiskFileSystemProvider extends RPCService<IRPCDiskFileSystemProvide
   }
 
   async getFileType(uri: string): Promise<string | undefined> {
-    try {
-      // 兼容性处理，本质 disk-file 不支持非 file 协议的文件头嗅探
-      if (!uri.startsWith('file:/')) {
-        return this._getFileType('');
-      }
-      // const lstat = await fs.lstat(FileUri.fsPath(uri));
-      const stat = await fse.stat(FileUri.fsPath(uri));
-
-      let ext = '';
-      if (!stat.isDirectory()) {
-        // if(lstat.isSymbolicLink){
-
-        // }else {
-        if (stat.size) {
-          const type = await fileType.stream(fse.createReadStream(FileUri.fsPath(uri)));
-          // 可以拿到 type.fileType 说明为二进制文件
-          if (type.fileType) {
-            ext = type.fileType.ext;
-          }
-        }
-        return this._getFileType(ext);
-        // }
-      } else {
-        return 'directory';
-      }
-    } catch (error) {
-      if (isErrnoException(error)) {
-        if (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EBUSY' || error.code === 'EPERM') {
-          return undefined;
-        }
-      }
-    }
-  }
-
-  private _getFileType(ext: string) {
-    let type = 'text';
-
-    if (EXT_LIST_IMAGE.indexOf(ext) !== -1) {
-      type = 'image';
-    } else if (EXT_LIST_VIDEO.indexOf(ext) !== -1) {
-      type = 'video';
-    } else if (ext && ['xml'].indexOf(ext) === -1) {
-      type = 'binary';
-    }
-
-    return type;
+    return await getFileType(uri);
   }
 }

@@ -2,9 +2,8 @@ import cls from 'classnames';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
-
 import { Select, Option } from '@opensumi/ide-components';
-import { useInjectable, localize, isElectronRenderer, URI } from '@opensumi/ide-core-browser';
+import { useInjectable, localize, URI, AppConfig } from '@opensumi/ide-core-browser';
 import { Select as NativeSelect } from '@opensumi/ide-core-browser/lib/components/select';
 
 import {
@@ -26,6 +25,7 @@ interface ConfigurationSelectorProps {
   isMultiRootWorkspace: boolean;
   addConfigurationLabel: string;
   workspaceRoots: string[];
+  isElectronRenderer: boolean;
   toValue: (option: DebugSessionOptions) => string;
   onChangeConfiguration(event: React.ChangeEvent<HTMLSelectElement> | string): void;
 }
@@ -39,6 +39,7 @@ const ConfigurationSelector = React.memo(
     addConfigurationLabel,
     toValue,
     workspaceRoots,
+    isElectronRenderer,
   }: ConfigurationSelectorProps) => {
     const renderConfigurationOptions = React.useCallback(
       (options) => {
@@ -47,7 +48,7 @@ const ConfigurationSelector = React.memo(
             const label = isMultiRootWorkspace
               ? `${option.configuration.name} (${new URI(option.workspaceFolderUri).displayName})`
               : option.configuration.name;
-            return isElectronRenderer() ? (
+            return isElectronRenderer ? (
               <option key={index} value={toValue(option)} label={label}>
                 {label}
               </option>
@@ -58,7 +59,7 @@ const ConfigurationSelector = React.memo(
             );
           });
         } else {
-          return isElectronRenderer()
+          return isElectronRenderer
             ? [
                 <option
                   value={DEFAULT_NO_CONFIGURATION_KEY}
@@ -90,7 +91,7 @@ const ConfigurationSelector = React.memo(
           if (longName.length < label.length) {
             longName = label;
           }
-          return isElectronRenderer() ? (
+          return isElectronRenderer ? (
             <option
               value={`${DEFAULT_ADD_CONFIGURATION_KEY}${index}`}
               key={`${DEFAULT_ADD_CONFIGURATION_KEY}${index}`}
@@ -108,7 +109,7 @@ const ConfigurationSelector = React.memo(
             </Option>
           );
         });
-        const disabledOption = isElectronRenderer()
+        const disabledOption = isElectronRenderer
           ? [
               <option disabled key={'--'} value={longName!.replace(/./g, '-')}>
                 {longName!.replace(/./g, '-')}
@@ -122,7 +123,7 @@ const ConfigurationSelector = React.memo(
         return disabledOption.concat(addonOptions);
       } else {
         const label = addConfigurationLabel;
-        return isElectronRenderer()
+        return isElectronRenderer
           ? [
               <option disabled key={'--'} value={label!.replace(/./g, '-')}>
                 {label!.replace(/./g, '-')}
@@ -142,7 +143,7 @@ const ConfigurationSelector = React.memo(
       }
     }, [isMultiRootWorkspace, addConfigurationLabel]);
 
-    if (isElectronRenderer()) {
+    if (isElectronRenderer) {
       return (
         <NativeSelect
           value={currentValue}
@@ -175,7 +176,7 @@ interface DebugActionBarProps {
 }
 
 export const DebugActionBar = React.memo(({ runDebug, openConfiguration, openDebugConsole }: DebugActionBarProps) => (
-  <div className={styles.kt_debug_actions}>
+  <div className={styles.debug_actions}>
     <DebugAction
       id='debug.action.start'
       icon={'start'}
@@ -211,6 +212,7 @@ export const DebugConfigurationView = observer((props) => {
     isMultiRootWorkspace,
     workspaceRoots,
   } = useInjectable<DebugConfigurationService>(DebugConfigurationService);
+  const appConfig = useInjectable<AppConfig>(AppConfig);
   const addConfigurationLabel = localize('debug.action.add.configuration');
   const setCurrentConfiguration = React.useCallback((event: React.ChangeEvent<HTMLSelectElement> | string) => {
     let value: React.ChangeEvent<HTMLSelectElement> | string;
@@ -243,6 +245,7 @@ export const DebugConfigurationView = observer((props) => {
           isMultiRootWorkspace={isMultiRootWorkspace}
           addConfigurationLabel={addConfigurationLabel}
           toValue={toValue}
+          isElectronRenderer={appConfig.isElectronRenderer}
           workspaceRoots={workspaceRoots}
         />
         <DebugActionBar runDebug={start} openConfiguration={openConfiguration} openDebugConsole={openDebugConsole} />

@@ -181,6 +181,11 @@ export interface AppConfig {
    */
   enableDebugExtensionHost?: boolean;
   /**
+   * 调试插件进程时的 inspect host 地址,
+   * 需要开启 `enableDebugExtensionHost` 配置才能生效
+   */
+  inspectExtensionHost?: string;
+  /**
    * 加载插件前端资源时的 fetch credentials 选项
    * 可选项为 "include" | "omit" | "same-origin"
    */
@@ -232,6 +237,16 @@ export interface AppConfig {
    * 配置插件 browser 层的 component 样式文件和 iconfont 样式文件
    */
   extensionBrowserStyleSheet?: ExtensionBrowserStyleSheet;
+  /**
+   * 是否采用工作区内的 `.vscode` 配置作为项目启动的配置默认值
+   * 该配置默认值仅在首次启动时进行同步，后续的更改将不会带来任何效果，即框架本身将不监听 `.vscode` 内的文件变化
+   */
+  useVSCodeWorkspaceConfiguration?: boolean;
+  /*
+   * 定义协同模块的通信路径
+   * 需要带端口号, 默认是 12345，可使用 COLLABORATION_PORT 字段来指定
+   */
+  collaborationWsPath?: string;
 }
 
 export const ConfigContext = React.createContext<AppConfig>({

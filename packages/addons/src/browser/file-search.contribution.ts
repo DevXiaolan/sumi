@@ -26,7 +26,6 @@ import {
   CommandRegistry,
   Command,
   CancellationTokenSource,
-  Schemes,
   CancellationToken,
   IRange,
   IReporterService,
@@ -105,7 +104,7 @@ class FileSearchActionLeftRight extends QuickOpenBaseAction {
   constructor() {
     super({
       id: 'file-search:splitToRight',
-      tooltip: localize('file-search.quickOpen.leftRight'),
+      tooltip: localize('quickOpen.openOnTheRightSide'),
       class: getIcon('embed'),
     });
   }
@@ -232,7 +231,9 @@ export class FileSearchQuickCommandHandler {
       },
       getPlaceholderItem: (lookFor: string) =>
         new QuickOpenItem({
-          label: localize(lookFor.indexOf('@') > -1 ? 'fileSymbolResults.notfound' : 'fileResults.notfound'),
+          label: localize(
+            lookFor.indexOf('@') > -1 ? 'search.fileSymbolResults.notfound' : 'search.fileResults.notfound',
+          ),
           run: () => false,
         }),
     };
@@ -319,7 +320,7 @@ export class FileSearchQuickCommandHandler {
                 iconClass: getSymbolIcon(symbol.kind),
                 description: (symbol.parent as INormalizedDocumentSymbol)?.name,
                 labelHighlights: (symbol as any).labelHighlights,
-                groupLabel: index === 0 ? formatLocalize('fileSymbolResults', flatSymbols.length) : '',
+                groupLabel: index === 0 ? formatLocalize('search.fileSymbolResults', flatSymbols.length) : '',
                 showBorder: false,
                 run: (mode: Mode) => {
                   if (mode === Mode.PREVIEW) {
@@ -343,7 +344,7 @@ export class FileSearchQuickCommandHandler {
       // 排序后设置第一个元素的样式
       if (results[0]) {
         const newItems = await this.getItems([results[0].getUri()!.toString()], {
-          groupLabel: localize('fileResults'),
+          groupLabel: localize('search.fileResults'),
           showBorder: true,
         });
         results[0] = newItems[0];
@@ -354,15 +355,7 @@ export class FileSearchQuickCommandHandler {
 
   protected async getQueryFiles(fileQuery: string, alreadyCollected: Set<string>, token: CancellationToken) {
     const roots = await this.workspaceService.roots;
-    const rootUris: string[] = [];
-    roots.forEach((stat) => {
-      const uri = new URI(stat.uri);
-      if (uri.scheme !== Schemes.file) {
-        return;
-      }
-      this.logger.debug('file-search.contribution rootUri', uri.toString());
-      return rootUris.push(uri.toString());
-    });
+    const rootUris: string[] = roots.map((stat) => new URI(stat.uri).codeUri.fsPath);
     const files = await this.fileSearchService.find(
       fileQuery,
       {
@@ -371,7 +364,7 @@ export class FileSearchQuickCommandHandler {
         limit: DEFAULT_FILE_SEARCH_LIMIT,
         useGitIgnore: true,
         noIgnoreParent: true,
-        excludePatterns: ['*.git*', ...this.getPreferenceSearchExcludes()],
+        excludePatterns: this.getPreferenceSearchExcludes(),
       },
       token,
     );
@@ -411,7 +404,7 @@ export class FileSearchQuickCommandHandler {
         return true;
       }),
       {
-        groupLabel: localize('historyMatches'),
+        groupLabel: localize('search.historyMatches'),
       },
     );
   }
@@ -422,7 +415,15 @@ export class FileSearchQuickCommandHandler {
     for (const [index, strUri] of uriList.entries()) {
       const uri = new URI(strUri);
       const icon = `file-icon ${await this.labelService.getIcon(uri.withoutFragment())}`;
-      const description = await this.workspaceService.asRelativePath(uri.parent.withoutFragment());
+      let description = '';
+      const relative = await this.workspaceService.asRelativePath(uri.parent);
+      if (relative) {
+        if (this.workspaceService.isMultiRootWorkspaceOpened) {
+          description = `${new URI(relative.root).displayName}${relative.path ? ` ・ ${relative.path}` : ''}`;
+        } else {
+          description = relative.path || '';
+        }
+      }
       const item = new QuickOpenItem({
         uri,
         label: uri.displayName,

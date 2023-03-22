@@ -17,6 +17,7 @@ import {
   ProgressLocation,
   ExtensionDidContributes,
   getLanguageId,
+  URI,
 } from '@opensumi/ide-core-common';
 import { IExtensionStorageService } from '@opensumi/ide-extension-storage';
 import { FileSearchServicePath, IFileSearchService } from '@opensumi/ide-file-search/lib/common';
@@ -251,7 +252,7 @@ export class ExtensionServiceImpl extends WithEventBus implements ExtensionServi
         this.extensionInstanceManageService.addExtensionInstance(extension);
       }
 
-      if (extension?.contributes) {
+      if (extension?.contributes && extension.enabled) {
         this.contributesService.register(extension.id, extension.contributes);
         this.sumiContributesService.register(extension.id, extension.packageJSON.kaitianContributes || {});
       }
@@ -484,7 +485,7 @@ export class ExtensionServiceImpl extends WithEventBus implements ExtensionServi
         (async () => {
           try {
             const result = await this.fileSearchService.find('', {
-              rootUris: this.workspaceService.tryGetRoots().map((r) => r.uri),
+              rootUris: this.workspaceService.tryGetRoots().map((stat) => new URI(stat.uri).codeUri.fsPath),
               includePatterns,
               limit: 1,
             });

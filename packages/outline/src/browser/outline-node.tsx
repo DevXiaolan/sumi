@@ -63,7 +63,7 @@ export const OutlineNode: React.FC<OutlineNodeRenderedProps> = ({
   };
 
   const paddingLeft = `${
-    defaultLeftPadding + (item.depth || 0) * (leftPadding || 0) + (!OutlineCompositeTreeNode.is(item) ? 16 : 0)
+    defaultLeftPadding + (item.depth || 0) * (leftPadding || 0) + (!OutlineCompositeTreeNode.is(item) ? 12 : 0)
   }px`;
 
   const editorNodeStyle = {
@@ -84,7 +84,7 @@ export const OutlineNode: React.FC<OutlineNodeRenderedProps> = ({
 
   const renderDisplayName = (node: OutlineCompositeTreeNode | OutlineTreeNode) => (
     <div
-      className={cls(styles.outline_node_segment, styles.outline_node_display_name, {
+      className={cls(styles.outline_node_segment, styles.outline_node_displayname, {
         [styles.deprecated]: node.raw.tags && node.raw.tags.indexOf(SymbolTag.Deprecated) >= 0,
       })}
     >
@@ -144,7 +144,7 @@ export const OutlineNode: React.FC<OutlineNodeRenderedProps> = ({
       style={editorNodeStyle}
       data-id={item.id}
     >
-      <div className={cls(styles.outline_node_content)}>
+      <div className={styles.outline_node_content}>
         {renderTwice(item)}
         {renderIcon(item)}
         <div className={styles.outline_node_overflow_wrap}>

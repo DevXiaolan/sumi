@@ -52,6 +52,8 @@ import {
   asTerminalIcon,
   TERMINAL_ID_SEPARATOR,
   ITerminalProfile,
+  TerminalCliterFilter,
+  TerminalLocation,
 } from '../common';
 
 import { TerminalContextKey } from './terminal.context-key';
@@ -549,10 +551,10 @@ export class TerminalController extends WithEventBus implements ITerminalControl
   }
 
   toJSON() {
-    const groups: { client: string; task?: string }[][] = [];
-    const cClient = this._clients.get(this.terminalView.currentWidgetId);
+    const groups: { client: string }[][] = [];
+    let cClient = this._clients.get(this.terminalView.currentWidgetId);
     this.terminalView.groups.forEach((wGroup) => {
-      const group: { client: string; task?: string }[] = [];
+      const group: { client: string }[] = [];
 
       wGroup.widgets.forEach((widget) => {
         const client = this._clients.get(widget.id);
@@ -564,10 +566,15 @@ export class TerminalController extends WithEventBus implements ITerminalControl
           return;
         }
 
-        const record: { client: string; task?: string } = { client: client.id };
         if (client.isTaskExecutor) {
-          record.task = client.taskId;
+          return;
         }
+
+        if (!cClient) {
+          cClient = client;
+        }
+
+        const record: { client: string } = { client: client.id };
         group.push(record);
       });
 
@@ -580,6 +587,21 @@ export class TerminalController extends WithEventBus implements ITerminalControl
       groups,
       current: cClient && cClient.id,
     };
+  }
+
+  disposeTerminalClients(filter?: TerminalCliterFilter) {
+    const clients = Array.from(this.clients.values()).filter(
+      (client) =>
+        client.id === filter?.id || client.isTaskExecutor === filter?.isTaskExecutor || client.name === filter?.name,
+    );
+
+    for (const client of clients) {
+      try {
+        client.dispose();
+      } catch (err) {
+        //
+      }
+    }
   }
 
   findClientFromWidgetId(widgetId: string) {
@@ -601,9 +623,8 @@ export class TerminalController extends WithEventBus implements ITerminalControl
       // isFeatureTerminal: withNullAsUndefined(options?.isFeatureTerminal),
       isExtensionOwnedTerminal: options.isExtensionTerminal,
       // useShellEnvironment: withNullAsUndefined(internalOptions?.useShellEnvironment),
-      // location:
-      // internalOptions?.location ||
-      // this._serializeParentTerminal(options.location, internalOptions?.resolvedExtHostIdentifier),
+      // 只支持 Panel
+      location: TerminalLocation.Panel,
       disablePersistence: withNullAsUndefined(options.isTransient),
     };
     shellLaunchConfig.__fromTerminalOptions = options;
@@ -715,6 +736,17 @@ export class TerminalController extends WithEventBus implements ITerminalControl
   hideTerminalPanel() {
     if (this._tabBarHandler && this._tabBarHandler.isActivated()) {
       this._tabBarHandler.deactivate();
+    }
+  }
+
+  toggleTerminalPanel() {
+    if (!this._tabBarHandler) {
+      return;
+    }
+    if (this._tabBarHandler.isActivated()) {
+      this._tabBarHandler.deactivate();
+    } else {
+      this._tabBarHandler.activate();
     }
   }
 

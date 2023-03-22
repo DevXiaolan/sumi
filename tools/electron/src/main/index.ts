@@ -15,7 +15,7 @@ const getExtensionDir = () => {
 };
 
 const electronApp = new ElectronMainApp({
-  browserNodeIntegrated: false,
+  browserNodeIntegrated: true,
   browserUrl: URI.file(join(__dirname, '../browser/index.html')).toString(),
   modules: [WebviewElectronMainModule],
   nodeEntry: join(__dirname, '../node/index.js'),
@@ -27,7 +27,7 @@ const electronApp = new ElectronMainApp({
   extensionDir: getExtensionDir(),
   extensionCandidate: [],
   overrideWebPreferences: {},
-  devtools: true, // 开启 core-electron-main 对 OpenSumi DevTools 的支持，默认为关闭
+  devtools: false, // 开启 core-electron-main 对 OpenSumi DevTools 的支持，默认为关闭
 });
 
 electronApp.init().then(() => {

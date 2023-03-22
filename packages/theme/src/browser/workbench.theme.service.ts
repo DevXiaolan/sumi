@@ -286,11 +286,12 @@ export class WorkbenchThemeService extends WithEventBus implements IThemeService
   public getAvailableThemeInfos(): ThemeInfo[] {
     const themeInfos: ThemeInfo[] = [];
     for (const { contribution } of this.themeContributionRegistry.values()) {
-      const { label, uiTheme } = contribution;
+      const { label, uiTheme, extensionId } = contribution;
       themeInfos.push({
         themeId: getThemeId(contribution),
         name: label,
         base: uiTheme || 'vs',
+        extensionId,
       });
     }
     return themeInfos;
@@ -312,11 +313,11 @@ export class WorkbenchThemeService extends WithEventBus implements IThemeService
   }
 
   private get colorCustomizations(): IColorCustomizations {
-    return this.preferenceService.get(CUSTOM_WORKBENCH_COLORS_SETTING) || {};
+    return this.preferenceService.getValid(CUSTOM_WORKBENCH_COLORS_SETTING, {});
   }
 
   private get tokenColorCustomizations(): ITokenColorCustomizations {
-    return this.preferenceService.get<ITokenColorCustomizations>(CUSTOM_EDITOR_COLORS_SETTING) || {};
+    return this.preferenceService.getValid<ITokenColorCustomizations>(CUSTOM_EDITOR_COLORS_SETTING, {});
   }
 
   private listen() {

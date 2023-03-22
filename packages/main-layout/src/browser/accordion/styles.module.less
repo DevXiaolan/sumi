@@ -47,6 +47,17 @@
   flex-direction: row;
   flex-shrink: 1;
   overflow: hidden;
+  i.arrow_icon {
+    display: flex;
+    align-items: center;
+    justify-items: center;
+    font-size: 16px;
+    margin: 0 4px;
+    color: var(--descriptionForeground);
+    &.kt_mod_collapsed {
+      transform: rotate(-90deg);
+    }
+  }
 }
 
 .kt_split_panel_body {
@@ -62,7 +73,10 @@
   .kt_split_panel_message {
     display: flex;
     padding: 4px 12px 4px 18px;
+    height: 14px;
+    line-height: 14px;
     user-select: text;
+    box-sizing: content-box;
   }
 }
 
@@ -134,15 +148,6 @@
   }
 }
 
-i.arrow_icon {
-  font-size: 16px;
-  margin: 0 4px;
-  color: var(--descriptionForeground);
-  &.kt_mod_collapsed {
-    transform: rotate(-90deg);
-  }
-}
-
 .actions_wrap {
   margin-right: 8px;
   display: none;
@@ -177,7 +182,7 @@ i.arrow_icon {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 20px 1em;
+  padding: 0 10px 1em;
   box-sizing: border-box;
   align-items: center;
   & > * {
@@ -196,7 +201,6 @@ i.arrow_icon {
     transition: max-width 0.2s ease-out;
     :global(.kt-button) {
       box-sizing: border-box;
-      display: flex;
       width: 100%;
       padding: 4px;
       text-align: center;
@@ -204,6 +208,9 @@ i.arrow_icon {
       justify-content: center;
       align-items: center;
       max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: inline-block;
     }
   }
 }

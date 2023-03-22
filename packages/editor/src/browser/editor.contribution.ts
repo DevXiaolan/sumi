@@ -10,6 +10,7 @@ import {
   URI,
   Domain,
   localize,
+  formatLocalize,
   MonacoService,
   ServiceNames,
   MonacoContribution,
@@ -40,6 +41,7 @@ import { ComponentContribution, ComponentRegistry } from '@opensumi/ide-core-bro
 import { MenuContribution, IMenuRegistry, MenuId } from '@opensumi/ide-core-browser/lib/menu/next';
 import { AbstractContextMenuService } from '@opensumi/ide-core-browser/lib/menu/next/menu.interface';
 import { ICtxMenuRenderer } from '@opensumi/ide-core-browser/lib/menu/next/renderer/ctxmenu/base';
+import { IRelaxedOpenMergeEditorArgs } from '@opensumi/ide-core-browser/lib/monaco/merge-editor-widget';
 import { isWindows, isOSX, PreferenceScope, ILogger, OnEvent, WithEventBus } from '@opensumi/ide-core-common';
 import { IElectronMainUIService } from '@opensumi/ide-core-common/lib/electron';
 import { ITextmateTokenizer, ITextmateTokenizerService } from '@opensumi/ide-monaco/lib/browser/contrib/tokenizer';
@@ -75,7 +77,12 @@ import { EditorContextMenuController } from './menu/editor.context';
 import { NavigationMenuContainer } from './navigation.view';
 import { GoToLineQuickOpenHandler } from './quick-open/go-to-line';
 import { WorkspaceSymbolQuickOpenHandler } from './quick-open/workspace-symbol-quickopen';
-import { EditorGroupsResetSizeEvent, BrowserEditorContribution, IEditorFeatureRegistry, ResourceDecorationChangeEvent } from './types';
+import {
+  EditorGroupsResetSizeEvent,
+  BrowserEditorContribution,
+  IEditorFeatureRegistry,
+  ResourceDecorationChangeEvent,
+} from './types';
 import { EditorSuggestWidgetContribution } from './view/suggest-widget';
 import { EditorTopPaddingContribution } from './view/topPadding';
 import { WorkbenchEditorServiceImpl, EditorGroup } from './workbench-editor.service';
@@ -341,6 +348,11 @@ export class EditorContribution
       keybinding: 'ctrlcmd+s',
     });
     keybindings.registerKeybinding({
+      command: EDITOR_COMMANDS.FOCUS_IF_NOT_ACTIVATE_ELEMENT.id,
+      keybinding: 'ctrlcmd+f',
+      when: '!editorFocus',
+    });
+    keybindings.registerKeybinding({
       command: EDITOR_COMMANDS.CLOSE.id,
       keybinding: this.isElectronRenderer() ? 'ctrlcmd+w' : 'alt+shift+w',
     });
@@ -455,16 +467,17 @@ export class EditorContribution
       });
     });
 
+    // The native `undo/redo` capability is retained in the native Input
     keybindings.registerKeybinding({
       command: EDITOR_COMMANDS.COMPONENT_UNDO.id,
       keybinding: 'ctrlcmd+z',
-      when: 'inEditorComponent',
+      when: 'inEditorComponent && !inputFocus',
     });
 
     keybindings.registerKeybinding({
       command: EDITOR_COMMANDS.COMPONENT_REDO.id,
       keybinding: 'shift+ctrlcmd+z',
-      when: 'inEditorComponent',
+      when: 'inEditorComponent && !inputFocus',
     });
 
     keybindings.registerKeybinding({
@@ -483,6 +496,16 @@ export class EditorContribution
     commands.registerCommand(EDITOR_COMMANDS.GO_FORWARD, {
       execute: () => {
         this.historyService.forward();
+      },
+    });
+
+    commands.registerCommand(EDITOR_COMMANDS.FOCUS_IF_NOT_ACTIVATE_ELEMENT, {
+      execute: () => {
+        if (!document.activeElement || document.activeElement === document.body) {
+          const group = this.workbenchEditorService.currentEditorGroup;
+          group?.focus();
+          group?.currentCodeEditor?.monacoEditor?.trigger('api', 'actions.find', null);
+        }
       },
     });
 
@@ -525,6 +548,21 @@ export class EditorContribution
             }),
           }),
           options,
+        );
+      },
+    });
+
+    commands.registerCommand(EDITOR_COMMANDS.OPEN_MERGEEDITOR, {
+      execute: (args: unknown) => {
+        const validatedArgs = IRelaxedOpenMergeEditorArgs.validate(args);
+        this.workbenchEditorService.open(
+          URI.from({
+            scheme: 'mergeEditor',
+            query: URI.stringifyQuery({
+              name: formatLocalize('mergeEditor.workbench.tab.name', validatedArgs.output.displayName),
+              openMetadata: IRelaxedOpenMergeEditorArgs.toString(validatedArgs),
+            }),
+          }),
         );
       },
     });
@@ -1162,6 +1200,25 @@ export class EditorContribution
       command: EDITOR_COMMANDS.COPY_RELATIVE_PATH.id,
       group: '10_path',
       order: 2,
+    });
+
+    menus.registerMenuItem(MenuId.BreadcrumbsTitleContext, {
+      command: EDITOR_COMMANDS.COPY_PATH.id,
+      group: '0_path',
+      order: 1,
+    });
+    menus.registerMenuItem(MenuId.BreadcrumbsTitleContext, {
+      command: EDITOR_COMMANDS.COPY_RELATIVE_PATH.id,
+      group: '0_path',
+      order: 2,
+    });
+    menus.registerMenuItem(MenuId.BreadcrumbsTitleContext, {
+      command: {
+        id: FILE_COMMANDS.REVEAL_IN_EXPLORER.id,
+        label: localize('file.revealInExplorer'),
+      },
+      group: '1_file',
+      order: 3,
     });
 
     menus.registerMenuItem(MenuId.EditorTitleContext, {

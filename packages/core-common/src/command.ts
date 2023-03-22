@@ -1,5 +1,5 @@
 import { Autowired, Injectable } from '@opensumi/di';
-import { Disposable, IDisposable, MaybePromise } from '@opensumi/ide-utils';
+import { Disposable, Emitter, Event, IDisposable, MaybePromise } from '@opensumi/ide-utils';
 
 import { ContributionProvider } from './contribution-provider';
 import { replaceLocalizePlaceholder } from './localize';
@@ -25,10 +25,6 @@ export interface Command {
    * 要在命令面板显示的图标
    */
   iconClass?: string;
-  /**
-   * 要在命令面板显示的图标
-   */
-  toogleIconClass?: string;
   /**
    * 要在命令面板显示的分组
    * 支持国际化占位符，例如 %evenEditorGroups%
@@ -146,6 +142,11 @@ export const CommandRegistry = Symbol('CommandRegistry');
 
 export const HANDLER_NOT_FOUND = 'HANDLER_NOT_FOUND';
 
+export interface ICommandEvent {
+  commandId: string;
+  args: any[];
+}
+
 /**
  * 命令执行模块
  */
@@ -155,6 +156,8 @@ export interface CommandService {
    * 执行命令将报错 catch 并 log 输出
    */
   tryExecuteCommand<T>(commandId: string, ...args: any[]): Promise<T | undefined>;
+  onWillExecuteCommand: Event<ICommandEvent>;
+  onDidExecuteCommand: Event<ICommandEvent>;
 }
 
 /**
@@ -695,8 +698,17 @@ export class CommandServiceImpl implements CommandService {
   @Autowired(CommandRegistry)
   private commandRegistry: CommandRegistryImpl;
 
+  private readonly _onWillExecuteCommand = new Emitter<ICommandEvent>();
+  readonly onWillExecuteCommand: Event<ICommandEvent> = this._onWillExecuteCommand.event;
+  private readonly _onDidExecuteCommand = new Emitter<ICommandEvent>();
+  readonly onDidExecuteCommand: Event<ICommandEvent> = this._onDidExecuteCommand.event;
+
   executeCommand<T>(commandId: string, ...args: any[]): Promise<T | undefined> {
-    return this.commandRegistry.executeCommand(commandId, ...args);
+    this._onWillExecuteCommand.fire({ commandId, args });
+    const result = this.commandRegistry.executeCommand<T>(commandId, ...args).finally(() => {
+      this._onDidExecuteCommand.fire({ commandId, args });
+    });
+    return Promise.resolve(result);
   }
 
   async tryExecuteCommand<T>(commandId: string, ...args: any[]): Promise<T | undefined> {

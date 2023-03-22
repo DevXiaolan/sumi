@@ -143,7 +143,7 @@ export class FileServiceClient implements IFileServiceClient {
   }
 
   public dispose() {
-    this.toDisposable.dispose();
+    return this.toDisposable.dispose();
   }
 
   /**
@@ -194,10 +194,10 @@ export class FileServiceClient implements IFileServiceClient {
       throw FileSystemError.FileNotFound(file.uri, 'File not found.');
     }
     if (stat.isDirectory) {
-      throw FileSystemError.FileIsDirectory(file.uri, 'Cannot set the content.');
+      throw FileSystemError.FileIsADirectory(file.uri, 'Cannot set the content.');
     }
     if (!(await this.isInSync(file, stat))) {
-      throw this.createOutOfSyncError(file, stat);
+      throw this.createOutOfSyncError(file);
     }
     await provider.writeFile(
       _uri.codeUri,
@@ -220,10 +220,10 @@ export class FileServiceClient implements IFileServiceClient {
       throw FileSystemError.FileNotFound(file.uri, 'File not found.');
     }
     if (stat.isDirectory) {
-      throw FileSystemError.FileIsDirectory(file.uri, 'Cannot set the content.');
+      throw FileSystemError.FileIsADirectory(file.uri, 'Cannot set the content.');
     }
     if (!this.checkInSync(file, stat)) {
-      throw this.createOutOfSyncError(file, stat);
+      throw this.createOutOfSyncError(file);
     }
     if (contentChanges.length === 0) {
       return stat;
@@ -345,8 +345,9 @@ export class FileServiceClient implements IFileServiceClient {
     });
 
     this.watcherDisposerMap.set(id, {
-      dispose: () => {
-        provider.unwatch && provider.unwatch(watcherId);
+      dispose: async () => {
+        const watcher = this.uriWatcherMap.get(_uri.toString());
+        await Promise.all([provider.unwatch && provider.unwatch(watcherId), watcher && watcher.dispose()]);
         this.uriWatcherMap.delete(_uri.toString());
       },
     });
@@ -390,7 +391,8 @@ export class FileServiceClient implements IFileServiceClient {
     if (!disposable || !disposable.dispose) {
       return;
     }
-    disposable.dispose();
+    this.watcherDisposerMap.delete(watcherId);
+    return disposable.dispose();
   }
 
   async delete(uriString: string, options?: FileDeleteOptions) {
@@ -449,8 +451,10 @@ export class FileServiceClient implements IFileServiceClient {
       ),
     );
     disposables.push({
-      dispose: () => {
-        (this.watcherWithSchemaMap.get(scheme) || []).forEach((id) => this.unwatchFileChanges(id));
+      dispose: async () => {
+        const promises = [] as any[];
+        (this.watcherWithSchemaMap.get(scheme) || []).forEach((id) => promises.push(this.unwatchFileChanges(id)));
+        await Promise.all(promises);
       },
     });
 
@@ -625,8 +629,8 @@ export class FileServiceClient implements IFileServiceClient {
     return stat.lastModification === file.lastModification && stat.size === file.size;
   }
 
-  protected createOutOfSyncError(file: FileStat, stat: FileStat): Error {
-    return FileSystemError.FileIsOutOfSync(file, stat);
+  protected createOutOfSyncError(file: FileStat): Error {
+    return FileSystemError.FileIsOutOfSync(file.uri);
   }
 
   protected async doGetEncoding(option?: { encoding?: string }): Promise<string> {

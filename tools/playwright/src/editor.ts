@@ -1,10 +1,10 @@
 import { OpenSumiApp } from './app';
 import { OPENSUMI_VIEW_CONTAINERS } from './constans';
-import { OpenSumiExplorerFileStatNode } from './explorer-view';
+import { OpenSumiTreeNode } from './tree-node';
 import { OpenSumiView } from './view';
 
 export class OpenSumiEditor extends OpenSumiView {
-  constructor(app: OpenSumiApp, private readonly filestatElement?: OpenSumiExplorerFileStatNode) {
+  constructor(app: OpenSumiApp, private readonly filestatElement?: OpenSumiTreeNode) {
     super(app, {
       tabSelector: `#${OPENSUMI_VIEW_CONTAINERS.EDITOR_TABS}`,
       viewSelector: `#${OPENSUMI_VIEW_CONTAINERS.EDITOR}`,
@@ -69,6 +69,11 @@ export class OpenSumiEditor extends OpenSumiView {
     await this.app.menubar.trigger('File', 'Save File');
     // waiting for saved
     await dirtyIcon?.waitForElementState('hidden');
+    await this.waitForEditorDone();
+  }
+
+  async waitForEditorDone() {
+    await this.page.waitForTimeout(200);
   }
 
   async close() {
@@ -92,7 +97,7 @@ export class OpenSumiEditor extends OpenSumiView {
     await this.activate();
     for (let i = 0; i < times; i++) {
       await this.app.menubar.trigger('Edit', 'Undo');
-      await this.app.page.waitForTimeout(200);
+      await this.waitForEditorDone();
     }
   }
 
@@ -100,7 +105,7 @@ export class OpenSumiEditor extends OpenSumiView {
     await this.activate();
     for (let i = 0; i < times; i++) {
       await this.app.menubar.trigger('Edit', 'Redo');
-      await this.app.page.waitForTimeout(200);
+      await this.waitForEditorDone();
     }
   }
 

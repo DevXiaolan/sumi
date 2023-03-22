@@ -13,6 +13,7 @@ import { MenuContribution, IMenuRegistry, MenuId } from '@opensumi/ide-core-brow
 import { CommandService, CUSTOM_EDITOR_SCHEME, IExtensionProps, URI } from '@opensumi/ide-core-common';
 import {
   BrowserEditorContribution,
+  EditorOpenType,
   IResource,
   ResourceService,
   WorkbenchEditorService,
@@ -24,8 +25,7 @@ import { EditorContextKeys } from '@opensumi/monaco-editor-core/esm/vs/editor/co
 import { ContextKeyExpr } from '@opensumi/monaco-editor-core/esm/vs/platform/contextkey/common/contextkey';
 import { DebugProtocol } from '@opensumi/vscode-debugprotocol';
 
-import { DEBUG_REPORT_NAME } from '../../../common';
-import { DEBUG_COMMANDS } from '../../debug-contribution';
+import { DEBUG_COMMANDS, DEBUG_REPORT_NAME } from '../../../common';
 import { DebugMemoryFileSystemProvider } from '../../debug-memory';
 import { DebugViewModel } from '../debug-view-model';
 
@@ -157,7 +157,7 @@ export class VariablesPanelContribution implements BrowserEditorContribution, Me
               disableNavigate: true,
               preview: true,
               forceOpenType: {
-                type: 'component',
+                type: EditorOpenType.component,
                 componentId: HEX_EDITOR_EDITOR_ID,
               },
             },

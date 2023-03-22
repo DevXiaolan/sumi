@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { Terminal } from 'xterm';
 
+import { Injectable } from '@opensumi/di';
 import { Disposable, PreferenceProvider, PreferenceResolveResult } from '@opensumi/ide-core-browser';
 import { PreferenceService } from '@opensumi/ide-core-browser';
 import { uuid, URI, Emitter, IDisposable, PreferenceScope, Deferred, OperatingSystem } from '@opensumi/ide-core-common';
@@ -42,6 +43,7 @@ Object.defineProperty(window, 'matchMedia', {
 
 export const defaultName = 'bash';
 
+@Injectable()
 export class MockSocketService implements ITerminalService {
   static resId = 1;
 
@@ -66,8 +68,7 @@ export class MockSocketService implements ITerminalService {
     const sock = new WebSocket(localhost(getPort()));
     this._socks.set(sessionId, sock);
 
-    await delay(1000);
-
+    await delay(2000);
     this._handleMethod(sessionId);
 
     await this._doMethod(sessionId, MessageMethod.create, { sessionId, cols, rows });
@@ -279,9 +280,11 @@ export class MockTerminalThemeService {
 /** Mock Preference Service */
 export class MockPreferenceService implements PreferenceService {
   ready: Promise<void> = Promise.resolve();
+
   hasLanguageSpecific(preferenceName: any, overrideIdentifier: string, resourceUri: string): boolean {
     return false;
   }
+
   async set(
     preferenceName: string,
     value: any,
@@ -295,9 +298,11 @@ export class MockPreferenceService implements PreferenceService {
   onPreferencesChanged() {
     return Disposable.NULL;
   }
+
   onLanguagePreferencesChanged() {
     return Disposable.NULL;
   }
+
   inspect<T>(
     preferenceName: string,
     resourceUri?: string,
@@ -313,9 +318,11 @@ export class MockPreferenceService implements PreferenceService {
     | undefined {
     return;
   }
+
   getProvider(scope: PreferenceScope): PreferenceProvider | undefined {
     return;
   }
+
   resolve<T>(
     preferenceName: string,
     defaultValue?: T,
@@ -325,13 +332,21 @@ export class MockPreferenceService implements PreferenceService {
   ): PreferenceResolveResult<T> {
     throw new Error('Method not implemented.');
   }
+
   onSpecificPreferenceChange() {
     return Disposable.NULL;
   }
+
   dispose(): void {}
+
   get(key: string, defaultValue?: any) {
     return defaultValue;
   }
+
+  getValid(key: string, defaultValue?: any) {
+    return defaultValue;
+  }
+
   onPreferenceChanged() {
     return new Disposable();
   }

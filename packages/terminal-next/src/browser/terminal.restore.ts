@@ -1,8 +1,9 @@
-import { Injectable, Autowired } from '@opensumi/di';
-import { Disposable } from '@opensumi/ide-core-common';
+import { Injectable, Autowired, INJECTOR_TOKEN, Injector } from '@opensumi/di';
+import { ScopedBrowserStorageService, AppConfig, Disposable } from '@opensumi/ide-core-browser';
 
-import { ITerminalRestore, ITerminalController, ITerminalInternalService } from '../common';
+import { ITerminalRestore, ITerminalController, ITerminalInternalService, ITerminalBrowserHistory } from '../common';
 
+const DEFAULT_TERMINAL_STORE_KEY = 'OPENSUMI_TERMINAL_RESTORE';
 @Injectable()
 export class TerminalRestore extends Disposable implements ITerminalRestore {
   @Autowired(ITerminalController)
@@ -11,24 +12,27 @@ export class TerminalRestore extends Disposable implements ITerminalRestore {
   @Autowired(ITerminalInternalService)
   protected readonly service: ITerminalInternalService;
 
+  @Autowired(ScopedBrowserStorageService)
+  protected readonly scopedBrowserStorageService: ScopedBrowserStorageService;
+
   get storageKey() {
-    // 集成方根据自己的场景来自定义storageKey做到终端恢复场景的准确性
-    return 'OPENSUMI_TERMINAL_RESTORE';
+    // 集成方可以根据自己的场景来通过 override 自定义 storageKey 做到终端恢复场景的准确性
+    return DEFAULT_TERMINAL_STORE_KEY;
   }
 
   save() {
     const json = this.controller.toJSON();
     const key = this.storageKey;
-    window.localStorage.setItem(key, JSON.stringify(json));
+    this.scopedBrowserStorageService.setData(key, json);
   }
 
   restore() {
     const key = this.storageKey;
-    const history = window.localStorage.getItem(key);
-    window.localStorage.removeItem(key); // 触发恢复之后清除掉缓存
+    const history = this.scopedBrowserStorageService.getData<ITerminalBrowserHistory>(key);
+    // this.scopedBrowserStorageService.removeData(key); // 触发恢复之后清除掉缓存
     if (history) {
       try {
-        return this.controller.recovery(JSON.parse(history));
+        return this.controller.recovery(history);
       } catch (_e) {
         /** nothing */
       }

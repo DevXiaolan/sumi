@@ -5,6 +5,7 @@ import { FileUri, UTF8 } from '@opensumi/ide-core-common';
 import { createBrowserInjector } from '@opensumi/ide-dev-tool/src/injector-helper';
 import { FileService } from '@opensumi/ide-file-service/lib/node';
 import { DiskFileSystemProvider } from '@opensumi/ide-file-service/lib/node/disk-file-system.provider';
+import { FileSystemWatcherServer } from '@opensumi/ide-file-service/lib/node/file-service-watcher';
 
 import { IFileServiceClient, FileServicePath, IDiskFileProvider } from '../../src';
 import { FileServiceClientModule } from '../../src/browser';
@@ -28,6 +29,8 @@ describe('FileServiceClient should be work', () => {
 
   beforeAll(() => {
     jest.setTimeout(10000);
+    // @ts-ignore
+    injector.mock(FileSystemWatcherServer, 'isEnableNSFW', () => false);
     fileServiceClient = injector.get(IFileServiceClient);
     fileServiceClient.registerProvider('file', injector.get(IDiskFileProvider));
   });
@@ -125,7 +128,6 @@ describe('FileServiceClient should be work', () => {
   });
 
   it('watch file change', async () => {
-    expect.assertions(1);
     const newTempDir = FileUri.create(fs.realpathSync(track.mkdirSync('watch-file-change')));
 
     const watcher = await fileServiceClient.watchFileChanges(newTempDir);
@@ -152,8 +154,6 @@ describe('FileServiceClient should be work', () => {
   });
 
   it('set watchExcludes', async () => {
-    expect.assertions(2);
-
     const targetDir = tempDir.resolve('watch-exclude-temp-dir');
     await fs.ensureDir(targetDir.codeUri.fsPath);
 

@@ -41,9 +41,10 @@ import {
   MenuId,
   ExplorerContextCallback,
 } from '@opensumi/ide-core-browser/lib/menu/next';
+import { IProgressService } from '@opensumi/ide-core-browser/lib/progress';
 import { Domain } from '@opensumi/ide-core-common/lib/di-helper';
 import { IDecorationsService } from '@opensumi/ide-decoration';
-import { IEditorOpenType, WorkbenchEditorService } from '@opensumi/ide-editor';
+import { EditorOpenType, IEditorOpenType, WorkbenchEditorService } from '@opensumi/ide-editor';
 import { EXPLORER_CONTAINER_ID } from '@opensumi/ide-explorer/lib/browser/explorer-contribution';
 import { IMainLayoutService, IViewsRegistry, MainLayoutContribution } from '@opensumi/ide-main-layout';
 import { ViewContentGroups } from '@opensumi/ide-main-layout/lib/browser/views-registry';
@@ -83,6 +84,9 @@ export class FileTreeContribution
 
   @Autowired(IMainLayoutService)
   private readonly mainLayoutService: IMainLayoutService;
+
+  @Autowired(IProgressService)
+  private progressService: IProgressService;
 
   @Autowired(IWorkspaceService)
   private readonly workspaceService: IWorkspaceService;
@@ -135,6 +139,7 @@ export class FileTreeContribution
       await this.fileTreeService.init();
       this.fileTreeModelService.initTreeModel();
     });
+    this.progressService.registerProgressIndicator(EXPLORER_CONTAINER_ID);
   }
 
   async onStart() {
@@ -593,10 +598,10 @@ export class FileTreeContribution
       const items: QuickOpenItem[] = [];
 
       const compareType = (o: IEditorOpenType, t: IEditorOpenType) => {
-        if (t.type === 'code') {
-          return o.type === 'code';
+        if (t.type === EditorOpenType.code) {
+          return o.type === EditorOpenType.code;
         }
-        if (t.type === 'component' && o.type === 'component') {
+        if (t.type === EditorOpenType.component && o.type === EditorOpenType.component) {
           return o.componentId === t.componentId;
         }
         return false;
@@ -852,7 +857,7 @@ export class FileTreeContribution
       },
       isEnabled: () =>
         (this.fileTreeModelService.pasteStore && this.fileTreeModelService.pasteStore.type !== PasteTypes.NONE) ||
-        !!this.clipboardService.hasResources(),
+        this.appConfig.isElectronRenderer,
     });
 
     if (this.appConfig.isElectronRenderer) {
@@ -1001,6 +1006,12 @@ export class FileTreeContribution
       },
     });
 
+    commands.registerCommand(FILE_COMMANDS.TOGGLE_OR_OPEN, {
+      execute: () => {
+        this.fileTreeModelService.toggleOrOpenCurrentFile();
+      },
+    });
+
     commands.registerCommand(WORKSPACE_COMMANDS.REMOVE_WORKSPACE_FOLDER, {
       execute: async (_: URI, uris: URI[]) => {
         exitFilterMode();
@@ -1026,7 +1037,7 @@ export class FileTreeContribution
     bindings.registerKeybinding({
       command: FILE_COMMANDS.COPY_FILE.id,
       keybinding: 'ctrlcmd+c',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
@@ -1038,24 +1049,24 @@ export class FileTreeContribution
     bindings.registerKeybinding({
       command: FILE_COMMANDS.CUT_FILE.id,
       keybinding: 'ctrlcmd+x',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
     bindings.registerKeybinding({
       command: FILE_COMMANDS.SELECT_CURRENT_NODE.id,
       keybinding: 'ctrlcmd+a',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
       command: FILE_COMMANDS.RENAME_FILE.id,
       keybinding: 'enter',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
       command: FILE_COMMANDS.DELETE_FILE.id,
       keybinding: 'ctrlcmd+backspace',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
@@ -1073,25 +1084,31 @@ export class FileTreeContribution
     bindings.registerKeybinding({
       command: FILE_COMMANDS.NEXT.id,
       keybinding: 'down',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
       command: FILE_COMMANDS.PREV.id,
       keybinding: 'up',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
       command: FILE_COMMANDS.EXPAND.id,
       keybinding: 'right',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({
       command: FILE_COMMANDS.COLLAPSE.id,
       keybinding: 'left',
-      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw}`,
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
+    });
+
+    bindings.registerKeybinding({
+      command: FILE_COMMANDS.TOGGLE_OR_OPEN.id,
+      keybinding: 'space',
+      when: `${FilesExplorerFocusedContext.raw} && !${FilesExplorerInputFocusedContext.raw} && !${FilesExplorerFilteredContext.raw}`,
     });
 
     bindings.registerKeybinding({

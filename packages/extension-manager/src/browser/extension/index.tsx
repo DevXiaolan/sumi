@@ -57,11 +57,17 @@ export const Extension = React.memo(
 
     return (
       <div className={styles.extension_item} onClick={onClickCallback}>
-        <img
-          className={styles.icon}
-          src={extension.iconUrl || `${openVSXRegistry}/default-icon.png`}
-          alt={replaceLocalizePlaceholder(extension.displayName, `${extension.publisher}.${extension.name}`)}
-        />
+        {extension.iconUrl ? (
+          <img
+            className={styles.icon}
+            src={extension.iconUrl}
+            alt={replaceLocalizePlaceholder(extension.displayName, `${extension.publisher}.${extension.name}`)}
+          />
+        ) : (
+          <div className={styles.default_icon}>
+            <Icon iconClass={getIcon('extension')} />
+          </div>
+        )}
         <div className={styles.extension_detail}>
           <div className={styles.base_info}>
             <span className={styles.display_name}>
@@ -84,21 +90,21 @@ export const Extension = React.memo(
             {type === ExtensionViewType.MARKETPLACE &&
               (isInstalled ? (
                 shouldUpdate ? (
-                  <Button type='link' size='small' onClick={onInstallCallback} disabled={installing}>
+                  <Button type='primary' size='small' onClick={onInstallCallback} disabled={installing}>
                     {localize(installing ? 'marketplace.extension.updating' : 'marketplace.extension.update')}
                   </Button>
                 ) : (
                   <span className={styles.state_text}>{localize('marketplace.extension.installed')}</span>
                 )
               ) : (
-                <>
-                  <Button type='link' size='small' onClick={onInstallCallback} disabled={installing}>
-                    {localize(installing ? 'marketplace.extension.installing' : 'marketplace.extension.install')}
-                  </Button>
-                </>
+                <Button type='primary' size='small' onClick={onInstallCallback} disabled={installing}>
+                  {localize(installing ? 'marketplace.extension.installing' : 'marketplace.extension.install')}
+                </Button>
               ))}
             {type === ExtensionViewType.INSTALLED && (
-              <span className={styles.state_text}>{localize('marketplace.extension.installed')}</span>
+              <Button type='primary' size='small' onClick={onInstallCallback} disabled={true}>
+                {localize('marketplace.extension.installed')}
+              </Button>
             )}
           </div>
         </div>

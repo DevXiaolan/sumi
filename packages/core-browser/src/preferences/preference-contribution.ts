@@ -12,12 +12,10 @@ import {
 } from '@opensumi/ide-core-common';
 import {
   PreferenceSchema,
-  PreferenceSchemaProperties,
   PreferenceDataSchema,
   PreferenceItem,
-  PreferenceSchemaProperty,
   PreferenceDataProperty,
-  JsonType,
+  PREFERENCE_PROPERTY_TYPE,
 } from '@opensumi/ide-core-common/lib/preferences/preference-schema';
 
 import { AppConfig } from '../react-providers/config-provider';
@@ -25,16 +23,6 @@ import { AppConfig } from '../react-providers/config-provider';
 import { PreferenceConfigurations, injectPreferenceConfigurations } from './preference-configurations';
 import { PreferenceProvider, PreferenceProviderDataChange, IResolvedPreferences } from './preference-provider';
 import { PreferenceScope } from './preference-scope';
-
-export {
-  PreferenceSchema,
-  PreferenceSchemaProperties,
-  PreferenceDataSchema,
-  PreferenceItem,
-  PreferenceSchemaProperty,
-  PreferenceDataProperty,
-  JsonType,
-};
 
 export const PreferenceContribution = Symbol('PreferenceContribution');
 export interface PreferenceContribution {
@@ -68,6 +56,8 @@ export namespace OverridePreferenceName {
 const OVERRIDE_PROPERTY = '\\[(.*)\\]$';
 export const OVERRIDE_PROPERTY_PATTERN = new RegExp(OVERRIDE_PROPERTY);
 
+const getDefaultSchema = () => ({ type: 'object', properties: {}, patternProperties: {} });
+
 @Injectable()
 export class PreferenceSchemaProvider extends PreferenceProvider {
   @Autowired(PreferenceContribution)
@@ -84,7 +74,7 @@ export class PreferenceSchemaProvider extends PreferenceProvider {
   protected readonly appConfig: AppConfig;
 
   protected preferences: { [name: string]: any } = {};
-  protected combinedSchema: PreferenceDataSchema = { properties: {}, patternProperties: {} };
+  protected combinedSchema: PreferenceDataSchema = getDefaultSchema();
   protected readonly onDidPreferenceSchemaChangedEmitter = new Emitter<void>();
   public readonly onDidPreferenceSchemaChanged: Event<void> = this.onDidPreferenceSchemaChangedEmitter.event;
 
@@ -98,7 +88,7 @@ export class PreferenceSchemaProvider extends PreferenceProvider {
     if (!this._validateFunction) {
       this.doUpdateValidate();
     }
-    return this._validateFunction!;
+    return this._validateFunction as Ajv.ValidateFunction;
   }
 
   constructor() {
@@ -109,7 +99,7 @@ export class PreferenceSchemaProvider extends PreferenceProvider {
       Disposable.create(() => {
         this.preferences = {};
         this.validationFunctions.clear();
-        this.combinedSchema = { properties: {}, patternProperties: {} };
+        this.combinedSchema = getDefaultSchema();
       }),
     );
 
@@ -205,18 +195,24 @@ export class PreferenceSchemaProvider extends PreferenceProvider {
     if (property.default !== undefined) {
       return property.default;
     }
-    const type = Array.isArray(property.type) ? property.type[0] : property.type;
+    // 当配置的类型数组存在 PREFERENCE_PROPERTY_TYPE.NULL 时，默认采用 PREFERENCE_PROPERTY_TYPE.NULL 类型
+    const type = Array.isArray(property.type)
+      ? property.type.includes(PREFERENCE_PROPERTY_TYPE.NULL)
+        ? PREFERENCE_PROPERTY_TYPE.NULL
+        : property.type[0]
+      : property.type;
     switch (type) {
-      case 'boolean':
+      case PREFERENCE_PROPERTY_TYPE.BOOLEAN:
         return false;
-      case 'integer':
-      case 'number':
+      case PREFERENCE_PROPERTY_TYPE.INT:
+      case PREFERENCE_PROPERTY_TYPE.NUMBER:
         return 0;
-      case 'string':
+      case PREFERENCE_PROPERTY_TYPE.STRING:
         return '';
-      case 'array':
+      case PREFERENCE_PROPERTY_TYPE.STRING_ARRAY:
+      case PREFERENCE_PROPERTY_TYPE.ARRAY:
         return [];
-      case 'object':
+      case PREFERENCE_PROPERTY_TYPE.OBJECT:
         return {};
     }
     return null;

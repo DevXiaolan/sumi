@@ -6,6 +6,8 @@ import { ConfigContext } from '@opensumi/ide-core-browser/lib/react-providers/co
 import { getExternalIcon, getIcon } from '@opensumi/ide-core-browser/lib/style/icon/icon';
 import { localize } from '@opensumi/ide-core-common/lib/localize';
 
+import { IContentSearchClientService } from '../common/content-search';
+
 import styles from './search.module.less';
 import { ContentSearchClientService } from './search.service';
 
@@ -27,7 +29,7 @@ const IncludeRuleContent = () => (
 const ExcludeRuleContent = React.memo(() => {
   const configContext = React.useContext(ConfigContext);
   const { injector } = configContext;
-  const searchBrowserService = injector.get(ContentSearchClientService);
+  const searchBrowserService = injector.get(IContentSearchClientService);
   const excludeList = React.useMemo(() => searchBrowserService.getPreferenceSearchExcludes(), [searchBrowserService]);
 
   return (
@@ -90,11 +92,12 @@ const IncludeInput = React.memo(
         placeholder={localize('search.includes.description')}
         onKeyUp={onSearch}
         onChange={onChangeInclude}
+        id='include-input-field'
         addonAfter={[
           <span
             key='onlyOpenEditors'
             className={cls(getExternalIcon('book'), styles.search_option, { [styles.select]: isOnlyOpenEditors })}
-            title={localize('onlyOpenEditors')}
+            title={localize('search.onlyOpenEditors')}
             onClick={onOnlyOpenEditorsToggle}
           />,
         ]}
@@ -120,7 +123,7 @@ const ExcludeInput = React.memo(
     <div className={cls(styles.glob_field, styles.search_excludes)}>
       <div className={styles.label}>
         <span className={styles.limit}>{localize('search.excludes')}</span>
-        <div className={styles.checkbox_wrap}>
+        <div className={styles.use_default_excludes_wrapper}>
           <CheckBox
             className={cls(styles.checkbox)}
             label={localize('search.excludes.default.enable')}
@@ -149,6 +152,7 @@ const ExcludeInput = React.memo(
         placeholder={localize('search.includes.description')}
         onKeyUp={onSearch}
         onChange={onChangeExclude}
+        id='exclude-input-field'
       />
     </div>
   ),

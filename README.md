@@ -5,6 +5,7 @@
 <div align="center">
  
 [![CI][ci-image]][ci-url]
+[![E2E][e2e-image]][e2e-url]
 [![NPM Version][npm-image]][npm-url]
 [![NPM downloads][download-image]][download-url]
 [![Test Coverage][test-image]][test-url]
@@ -14,6 +15,8 @@
 
 [ci-image]: https://github.com/opensumi/core/actions/workflows/ci.yml/badge.svg
 [ci-url]: https://github.com/opensumi/core/actions/workflows/ci.yml
+[e2e-image]: https://github.com/opensumi/core/actions/workflows/e2e.yml/badge.svg
+[e2e-url]: https://github.com/opensumi/core/actions/workflows/e2e.yml
 [discussions-image]: https://img.shields.io/badge/discussions-on%20github-blue
 [discussions-url]: https://github.com/opensumi/core/discussions
 [npm-image]: https://img.shields.io/npm/v/@opensumi/ide-core-common.svg
@@ -39,16 +42,16 @@ English | [简体中文](./README-zh_CN.md)
 ## ⚡️ Quick Start
 
 ```bash
-$ npm install
-$ npm run init
-$ npm run download-extension  # Optional
-$ npm run start
+$ yarn install
+$ yarn run init
+$ yarn run download-extension  # Optional
+$ yarn run start
 ```
 
 By default, the `tools/workspace` folder in the project would be opened, or you can run the project by specifying the directory in the following way:
 
 ```bash
-$ MY_WORKSPACE={local_path} npm run start
+$ MY_WORKSPACE={local_path} yarn run start
 ```
 
 Usually, you may still encounter some system-level environment dependencies. You can visit [Development Environment Preparation](./CONTRIBUTING.md#development-environment-preparation) to see how to install the corresponding environment dependencies.
@@ -59,7 +62,7 @@ Here you can find some of our example projects and templates:
 
 - [Cloud IDE](https://github.com/opensumi/ide-startup)
 - [Desktop IDE - based on the Electron](https://github.com/opensumi/ide-electron)
-- [Lite Web IDE - pure web IDE based on the Browser](https://github.com/opensumi/ide-electron)
+- [Lite Web IDE - pure web IDE based on the Browser](https://github.com/opensumi/ide-startup-lite)
 - [The Mini-App liked IDE](https://github.com/opensumi/app-desktop)
 
 ## 📕 Documentation
@@ -87,6 +90,10 @@ Go to our [issues](https://github.com/opensumi/core/issues) or [discussions](htt
 Copyright (c) 2019-present Alibaba Group Holding Limited, Ant Group Co. Ltd.
 
 Licensed under the [MIT](LICENSE) license.
+
+This project contains various third-party code under other open source licenses.
+
+See the [NOTICE.md](./NOTICE.md) file for more information.
 
 ## ✨ Contributors
 

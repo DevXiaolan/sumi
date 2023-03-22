@@ -14,6 +14,7 @@ import {
   Command,
   localize,
   PreferenceSchema,
+  CommonLanguageId,
 } from '@opensumi/ide-core-common';
 import { Domain } from '@opensumi/ide-core-common/lib/di-helper';
 import * as monaco from '@opensumi/monaco-editor-core/esm/vs/editor/editor.api';
@@ -25,7 +26,6 @@ import { Output, ChannelSelector } from './output.view';
 
 const OUTPUT_CLEAR: Command = {
   id: 'output.channel.clear',
-  iconClass: getIcon('clear'),
   label: '%output.channel.clear%',
 };
 
@@ -54,21 +54,21 @@ export class OutputContribution
   schema: PreferenceSchema = outputPreferenceSchema;
 
   onStart() {
-    this.addDispose(monaco.languages.registerLinkProvider('log', this.outputLinkProvider));
+    this.addDispose(monaco.languages.registerLinkProvider(CommonLanguageId.Log, this.outputLinkProvider));
   }
 
   registerToolbarItems(registry: ToolbarRegistry) {
     registry.registerItem({
       id: 'output.clear.action',
       command: OUTPUT_CLEAR.id,
+      iconClass: getIcon('clear'),
       viewId: OUTPUT_CONTAINER_ID,
     });
   }
 
   registerCommands(commands: CommandRegistry): void {
     commands.registerCommand(OUTPUT_CLEAR, {
-      execute: () => this.outputService.selectedChannel.clear(),
-      isEnabled: () => !!this.outputService.selectedChannel,
+      execute: () => this.outputService.selectedChannel?.clear(),
     });
   }
 

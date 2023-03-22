@@ -6,6 +6,7 @@ import {
   EditorComponentRegistry,
   BrowserEditorContribution,
   IEditorDocumentModelContentRegistry,
+  EditorOpenType,
 } from '@opensumi/ide-editor/lib/browser';
 import {
   UntitledSchemeResourceProvider,
@@ -107,14 +108,13 @@ export class FileSystemEditorComponentContribution implements BrowserEditorContr
       (resource: IResource<any>, results: IEditorOpenType[]) => {
         if (results.length === 0) {
           results.push({
-            type: 'component',
+            type: EditorOpenType.component,
             componentId: EXTERNAL_OPEN_COMPONENT_ID,
           });
         }
       },
     );
 
-    // 图片文件
     editorComponentRegistry.registerEditorComponentResolver(
       (scheme: string) => (scheme === Schemes.file || this.fileServiceClient.handlesScheme(scheme) ? 10 : -1),
       async (resource: IResource<any>, results: IEditorOpenType[]) => {
@@ -122,14 +122,14 @@ export class FileSystemEditorComponentContribution implements BrowserEditorContr
 
         if (type === 'image') {
           results.push({
-            type: 'component',
+            type: EditorOpenType.component,
             componentId: IMAGE_PREVIEW_COMPONENT_ID,
           });
         }
 
         if (type === 'video') {
           results.push({
-            type: 'component',
+            type: EditorOpenType.component,
             componentId: VIDEO_PREVIEW_COMPONENT_ID,
           });
         }
@@ -137,16 +137,17 @@ export class FileSystemEditorComponentContribution implements BrowserEditorContr
         if (type === 'text') {
           const { metadata, uri } = resource as { uri: URI; metadata: any };
           const stat = await this.fileServiceClient.getFileStat(uri.toString());
-          const maxSize = this.preference.get<number>('editor.largeFile') || 20000;
+          await this.preference.ready;
+          const maxSize = this.preference.get<number>('editor.largeFile') || 4 * 1024 * 1024 * 1024;
 
           if (stat && (stat.size || 0) > maxSize && !(metadata || {}).noPrevent) {
             results.push({
-              type: 'component',
+              type: EditorOpenType.component,
               componentId: LARGE_FILE_PREVENT_COMPONENT_ID,
             });
           } else {
             results.push({
-              type: 'code',
+              type: EditorOpenType.code,
               title: localize('editorOpenType.code'),
             });
           }
@@ -160,7 +161,7 @@ export class FileSystemEditorComponentContribution implements BrowserEditorContr
       (_resource: IResource<any>, _results: IEditorOpenType[], resolve: (results: IEditorOpenType[]) => void) => {
         resolve([
           {
-            type: 'code',
+            type: EditorOpenType.code,
             priority: 'default',
           },
         ]);

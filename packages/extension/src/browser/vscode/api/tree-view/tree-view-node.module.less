@@ -34,20 +34,11 @@
   &.mod_focused {
     outline: 1px solid var(--list-focusOutline);
     outline-offset: -1px;
-    color: var(--kt-tree-activeSelectionForeground) !important;
-    background: var(--kt-tree-activeSelectionBackground);
-
-    .expansion_toggle {
-      color: var(--kt-tree-activeSelectionForeground) !important;
-    }
   }
 
   &.mod_actived {
     outline: 1px solid var(--list-focusOutline);
     outline-offset: -1px;
-    .expansion_toggle {
-      color: var(--kt-tree-activeSelectionForeground) !important;
-    }
   }
 
   &.mod_invalid {
@@ -196,6 +187,7 @@
   white-space: nowrap;
   text-align: left;
   display: flex;
+  color: var(--foreground);
 }
 
 .tree_view_drag_image {

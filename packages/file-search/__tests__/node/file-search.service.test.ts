@@ -3,14 +3,13 @@ import path from 'path';
 import { CancellationTokenSource } from '@opensumi/ide-core-common';
 import { FileUri, URI, AppConfig, INodeLogger, NodeLogger } from '@opensumi/ide-core-node';
 import { createNodeInjector } from '@opensumi/ide-dev-tool/src/injector-helper';
-import { LogServiceModule } from '@opensumi/ide-logs/lib/node';
 import { ProcessModule } from '@opensumi/ide-process/lib/node';
 
 import { IFileSearchService } from '../../src';
 import { FileSearchModule } from '../../src/node';
 
 describe('search-service', () => {
-  const injector = createNodeInjector([FileSearchModule, ProcessModule, LogServiceModule]);
+  const injector = createNodeInjector([FileSearchModule, ProcessModule]);
   injector.addProviders(
     {
       token: AppConfig,
@@ -24,7 +23,7 @@ describe('search-service', () => {
   const service = injector.get(IFileSearchService);
 
   it('shall fuzzy search this spec file', async () => {
-    const rootUri = FileUri.create(path.resolve(__dirname, './')).toString();
+    const rootUri = path.resolve(__dirname, './');
     const matches = await service.find('test', { rootUris: [rootUri] });
     const expectedFile = FileUri.create(__filename).displayName;
     const testFile = matches.find((e) => e.endsWith(expectedFile));
@@ -32,7 +31,7 @@ describe('search-service', () => {
   });
 
   it.skip('shall respect nested .gitignore', async () => {
-    const rootUri = FileUri.create(path.resolve(__dirname, '../test-resources')).toString();
+    const rootUri = path.resolve(__dirname, '../test-resources');
     const matches = await service.find('foo', { rootUris: [rootUri], fuzzyMatch: false });
 
     expect(matches.find((match) => match.endsWith('subdir1/sub-bar/foo.txt'))).toBeUndefined();
@@ -41,7 +40,7 @@ describe('search-service', () => {
   });
 
   it('shall cancel searches', async () => {
-    const rootUri = FileUri.create(path.resolve(__dirname, '../../../../..')).toString();
+    const rootUri = path.resolve(__dirname, '../../../../..');
     const cancelTokenSource = new CancellationTokenSource();
     cancelTokenSource.cancel();
     const matches = await service.find('foo', { rootUris: [rootUri], fuzzyMatch: false }, cancelTokenSource.token);
@@ -50,8 +49,8 @@ describe('search-service', () => {
   });
 
   it('should perform file search across all folders in the workspace', async () => {
-    const dirA = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/sub-bar')).toString();
-    const dirB = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/sub2')).toString();
+    const dirA = path.resolve(__dirname, '../test-resources/subdir1/sub-bar');
+    const dirB = path.resolve(__dirname, '../test-resources/subdir1/sub2');
 
     const matches = await service.find('foo', { rootUris: [dirA, dirB] });
     expect(matches).toBeDefined();
@@ -59,7 +58,7 @@ describe('search-service', () => {
   });
 
   it('search hidden file in the workspace', async () => {
-    const dir = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1')).toString();
+    const dir = path.resolve(__dirname, '../test-resources/subdir1');
 
     const matches = await service.find('.sumi', { rootUris: [dir] });
     expect(matches).toBeDefined();
@@ -68,7 +67,7 @@ describe('search-service', () => {
 
   describe('search with glob', () => {
     it('should support file searches with globs', async () => {
-      const rootUri = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/sub2')).toString();
+      const rootUri = path.resolve(__dirname, '../test-resources/subdir1/sub2');
 
       const matches = await service.find('', { rootUris: [rootUri], includePatterns: ['**/*oo.*'] });
       expect(matches).toBeDefined();
@@ -76,7 +75,7 @@ describe('search-service', () => {
     });
 
     it('should NOT support file searches with globs without the prefixed or trailing star (*)', async () => {
-      const rootUri = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/sub2')).toString();
+      const rootUri = path.resolve(__dirname, '../test-resources/subdir1/sub2');
 
       const trailingMatches = await service.find('', { rootUris: [rootUri], includePatterns: ['*oo'] });
       expect(trailingMatches).toBeDefined();
@@ -90,7 +89,7 @@ describe('search-service', () => {
 
   describe('search with ignored patterns', () => {
     it('should NOT ignore strings passed through the search options', async () => {
-      const rootUri = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/sub2')).toString();
+      const rootUri = path.resolve(__dirname, '../test-resources/subdir1/sub2');
 
       const matches = await service.find('', {
         rootUris: [rootUri],
@@ -155,7 +154,7 @@ describe('search-service', () => {
   });
 
   describe('irrelevant absolute results', () => {
-    const rootUri = FileUri.create(path.resolve(__dirname, '../test-resources/subdir1/'));
+    const rootUri = path.resolve(__dirname, '../test-resources/subdir1/');
     const searchPattern = 'oox';
 
     it('not fuzzy', async () => {
@@ -176,7 +175,7 @@ describe('search-service', () => {
         limit: 200,
       });
       for (const match of matches) {
-        const relativeUri = rootUri.relative(new URI(match));
+        const relativeUri = path.relative(rootUri, match);
         expect(relativeUri !== undefined).toBe(true);
         const relativeMatch = relativeUri!.toString();
         let position = 0;

@@ -1,14 +1,15 @@
 {
   "name": "@opensumi/ide-remote-opener",
-  "version": "2.21.1",
+  "version": "2.23.0",
   "files": [
-    "lib"
+    "lib",
+    "src"
   ],
   "license": "MIT",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "scripts": {
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "yarn run build",
     "build": "tsc --build ../../configs/ts/references/tsconfig.remote-opener.json"
   },
   "repository": {
@@ -16,12 +17,12 @@
     "url": "git@github.com:opensumi/core.git"
   },
   "dependencies": {
-    "@opensumi/ide-connection": "2.21.1",
-    "@opensumi/ide-core-common": "2.21.1",
-    "@opensumi/ide-core-node": "2.21.1"
+    "@opensumi/ide-connection": "workspace:*",
+    "@opensumi/ide-core-common": "workspace:*",
+    "@opensumi/ide-core-node": "workspace:*"
   },
   "devDependencies": {
-    "@opensumi/ide-core-browser": "2.21.1",
-    "@opensumi/ide-editor": "2.21.1"
+    "@opensumi/ide-core-browser": "workspace:*",
+    "@opensumi/ide-editor": "workspace:*"
   }
 }

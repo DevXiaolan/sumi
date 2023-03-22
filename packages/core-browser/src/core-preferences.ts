@@ -2,12 +2,13 @@ import { Injector } from '@opensumi/di';
 import {
   localize,
   getAvailableLanguages,
-  isElectronRenderer,
   SUPPORTED_ENCODINGS,
   GeneralSettingsId,
+  PreferenceSchema,
 } from '@opensumi/ide-core-common';
+import { LOCALE_TYPES } from '@opensumi/ide-core-common/lib/const';
 
-import { createPreferenceProxy, PreferenceProxy, PreferenceService, PreferenceSchema } from './preferences';
+import { createPreferenceProxy, PreferenceProxy, PreferenceService } from './preferences';
 
 const EXPLORER_DEFAULTS = {
   confirmDelete: true,
@@ -18,7 +19,7 @@ export const FILES_DEFAULTS = {
   filesWatcherExclude: {
     '**/.git/objects/**': true,
     '**/.git/subtree-cache/**': true,
-    '**/node_modules/*/**': true,
+    '**/node_modules/**/*': true,
     '**/.hg/store/**': true,
   },
   filesExclude: {
@@ -41,7 +42,7 @@ export const corePreferenceSchema: PreferenceSchema = {
     'general.language': {
       type: 'string',
       enum: getAvailableLanguages().map((l) => l.languageId),
-      default: 'zh-CN',
+      default: LOCALE_TYPES.EN_US,
     },
     'general.theme': {
       type: 'string',
@@ -96,7 +97,7 @@ export const corePreferenceSchema: PreferenceSchema = {
       type: 'string',
       enum: ['singleClick', 'doubleClick'],
       default: 'singleClick',
-      description: localize('preference.workbench.list.openMode'),
+      description: '%preference.workbench.list.openMode%',
     },
     'workbench.commandPalette.history': {
       type: 'number',

@@ -44,6 +44,11 @@ export interface IIconService {
    * */
   applyTheme(themeId: string): Promise<void>;
   /**
+   * 将 Base64 路径进行转义，便于在 `background: url("${iconPath}")` 结构中使用
+   * @param iconPath Base64 路径
+   */
+  encodeBase64Path(iconPath: string): string;
+  /**
    * 将 codicon 的 id 转换为 codicon 的 class
    * @param str codicon id eg. $(add), $(add~sync)
    */
@@ -217,6 +222,7 @@ export interface ThemeContribution {
   // default to be vs
   uiTheme?: BuiltinTheme;
   path: string;
+  extensionId: string;
 }
 
 // base themes
@@ -324,12 +330,14 @@ export interface ThemeInfo {
   name: string;
   base: BuiltinTheme;
   themeId: string;
+  extensionId: string;
   inherit?: boolean;
 }
 
 export interface IconThemeInfo {
   name: string;
   themeId: string;
+  extensionId: string;
 }
 
 export function themeColorFromId(id: ColorIdentifier) {

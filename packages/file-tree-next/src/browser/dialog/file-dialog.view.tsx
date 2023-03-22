@@ -11,7 +11,7 @@ import {
   TreeNodeType,
 } from '@opensumi/ide-components';
 import { useInjectable, localize, isMacintosh, path } from '@opensumi/ide-core-browser';
-import { ProgressBar } from '@opensumi/ide-core-browser/lib/components/progressbar';
+import { Progress } from '@opensumi/ide-core-browser/lib/progress/progress-bar';
 import { IDialogService, ISaveDialogOptions, IOpenDialogOptions } from '@opensumi/ide-overlay';
 
 import { Directory, File } from '../../common/file-tree-node.define';
@@ -178,11 +178,10 @@ export const FileDialog = ({ options, model, isOpenDialog }: React.PropsWithChil
 
   const renderDialogTree = () => {
     if (!isReady) {
-      return <ProgressBar loading />;
+      return <Progress loading />;
     } else if (model.treeModel) {
       return (
         <RecycleTree
-          width={398}
           height={300}
           itemHeight={FILE_TREE_DIALOG_HEIGHT}
           onReady={handleTreeReady}
@@ -210,13 +209,13 @@ export const FileDialog = ({ options, model, isOpenDialog }: React.PropsWithChil
 
   if (isOpenDialog) {
     return (
-      <React.Fragment>
+      <div className={styles.file_dialog_wrapper}>
         <div className={styles.file_dialog_directory_title}>{options.title || localize('dialog.file.openLabel')}</div>
         <div className={styles.file_dialog_directory}>{renderDirectorySelection()}</div>
         <div className={styles.file_dialog_content} ref={wrapperRef}>
           {renderDialogTree()}
         </div>
-        <div className={styles.buttonWrap}>
+        <div className={styles.file_dialog_buttons}>
           <Button onClick={() => close()} type='secondary' className={styles.button}>
             {localize('dialog.file.close')}
           </Button>
@@ -224,11 +223,11 @@ export const FileDialog = ({ options, model, isOpenDialog }: React.PropsWithChil
             {(options as IOpenDialogOptions).openLabel || localize('dialog.file.ok')}
           </Button>
         </div>
-      </React.Fragment>
+      </div>
     );
   } else {
     return (
-      <React.Fragment>
+      <div className={styles.file_dialog_wrapper}>
         <div className={styles.file_dialog_directory_title}>
           {(options as ISaveDialogOptions).saveLabel || localize('dialog.file.saveLabel')}
         </div>
@@ -246,7 +245,7 @@ export const FileDialog = ({ options, model, isOpenDialog }: React.PropsWithChil
             ></Input>
           </div>
         )}
-        <div className={styles.buttonWrap}>
+        <div className={styles.file_dialog_buttons}>
           <Button onClick={() => close()} type='secondary' className={styles.button}>
             {localize('dialog.file.close')}
           </Button>
@@ -259,7 +258,7 @@ export const FileDialog = ({ options, model, isOpenDialog }: React.PropsWithChil
             {localize('dialog.file.ok')}
           </Button>
         </div>
-      </React.Fragment>
+      </div>
     );
   }
 };

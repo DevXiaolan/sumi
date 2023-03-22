@@ -29,12 +29,14 @@ import {
   getIcon,
   isString,
   ISettingSection,
+  CodeSchemaId,
 } from '@opensumi/ide-core-browser';
 import { MenuContribution, IMenuRegistry, MenuId } from '@opensumi/ide-core-browser/lib/menu/next';
 import { ResourceService, IResourceProvider, IResource } from '@opensumi/ide-editor';
 import {
   BrowserEditorContribution,
   EditorComponentRegistry,
+  EditorOpenType,
   IEditor,
   IEditorFeatureRegistry,
   IResourceOpenResult,
@@ -181,8 +183,6 @@ export class PreferenceContribution
      */
     this.registerSettings();
     this.registerSettingSections();
-
-    this.preferenceService.fireDidSettingsChange();
   }
 
   registerCommands(commands: CommandRegistry) {
@@ -195,7 +195,7 @@ export class PreferenceContribution
     commands.registerCommand(COMMON_COMMANDS.LOCATE_PREFERENCES, {
       execute: async (groupId: string) => {
         await this.openPreferences();
-        return await this.preferenceService.setCurrentGroup(groupId);
+        return await this.preferenceService.scrollToGroup(groupId);
       },
     });
 
@@ -313,12 +313,14 @@ export class PreferenceContribution
     });
   }
 
-  async openPreferences(search?: string, prefernceId?: string) {
+  async openPreferences(search?: string, preferenceId?: string) {
     await this.commandService.executeCommand(EDITOR_COMMANDS.OPEN_RESOURCE.id, new URI('/').withScheme(PREF_SCHEME), {
       preview: false,
     });
     if (isString(search)) {
       this.preferenceService.search(search);
+    } else if (isString(preferenceId)) {
+      this.preferenceService.scrollToPreference(preferenceId);
     }
   }
 
@@ -395,7 +397,7 @@ export class PreferenceContribution
   }
 
   registerSchema(registry: IJSONSchemaRegistry) {
-    registry.registerSchema('vscode://schemas/settings/user', this.schemaProvider.getCombinedSchema(), [
+    registry.registerSchema(CodeSchemaId.userSettings, this.schemaProvider.getCombinedSchema(), [
       'settings.json',
       USER_PREFERENCE_URI.toString(),
     ]);
@@ -415,7 +417,7 @@ export class PreferenceContribution
     editorComponentRegistry.registerEditorComponentResolver(PREF_SCHEME, (_, __, resolve) => {
       resolve([
         {
-          type: 'component',
+          type: EditorOpenType.component,
           componentId: PREF_PREVIEW_COMPONENT_ID,
         },
       ]);

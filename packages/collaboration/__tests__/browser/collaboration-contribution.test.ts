@@ -2,7 +2,6 @@ import { KeybindingRegistry, KeybindingWeight, PreferenceService } from '@opensu
 import { CommandRegistry, CommandRegistryImpl, IDisposable, ILogger } from '@opensumi/ide-core-common';
 import { createBrowserInjector } from '@opensumi/ide-dev-tool/src/injector-helper';
 import { MockInjector } from '@opensumi/ide-dev-tool/src/mock-injector';
-import { AUTO_SAVE_MODE } from '@opensumi/ide-editor';
 import { IFileService, IFileServiceClient } from '@opensumi/ide-file-service';
 
 import {
@@ -23,6 +22,10 @@ describe('CollaborationContribution test', () => {
   let collaborationService: ICollaborationService;
   let preferenceService: PreferenceService;
 
+  const mockCollaborationService = {
+    initFileWatch: jest.fn(),
+  };
+
   beforeAll(() => {
     injector = createBrowserInjector([]);
     injector.mockService(ILogger);
@@ -32,7 +35,6 @@ describe('CollaborationContribution test', () => {
     injector.mockService(KeybindingRegistry);
     injector.addProviders(
       CollaborationContribution,
-
       {
         token: ICollaborationService,
         useClass: CollaborationService,
@@ -54,6 +56,11 @@ describe('CollaborationContribution test', () => {
     injector.addProviders({
       token: CollaborationModuleContribution,
       useValue: { getContributions: () => [] },
+    });
+
+    injector.overrideProviders({
+      token: ICollaborationService,
+      useValue: mockCollaborationService,
     });
 
     contribution = injector.get(CollaborationContribution);
@@ -82,5 +89,10 @@ describe('CollaborationContribution test', () => {
     contribution.registerCommands(registry);
 
     expect(registry.getCommands()).toEqual([UNDO, REDO]);
+  });
+
+  it('should registry file watcher', () => {
+    contribution.onFileServiceReady();
+    expect(mockCollaborationService.initFileWatch).toBeCalledTimes(1);
   });
 });

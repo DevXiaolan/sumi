@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { WebsocketProvider } from 'y-websocket';
-import * as Y from 'yjs';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { Doc as YDoc, Map as YMap, YMapEvent, Text as YText } from 'yjs';
 
 import { Injectable, Autowired, Inject, INJECTOR_TOKEN, Injector } from '@opensumi/di';
-import { AppConfig } from '@opensumi/ide-core-browser';
+import { AppConfig, DisposableCollection } from '@opensumi/ide-core-browser';
 import { Deferred, ILogger, OnEvent, uuid, WithEventBus } from '@opensumi/ide-core-common';
 import { WorkbenchEditorService } from '@opensumi/ide-editor';
 import {
@@ -14,6 +16,7 @@ import {
   IEditorDocumentModelService,
 } from '@opensumi/ide-editor/lib/browser';
 import { WorkbenchEditorServiceImpl } from '@opensumi/ide-editor/lib/browser/workbench-editor.service';
+import { IFileServiceClient, FileChangeEvent, FileChangeType } from '@opensumi/ide-file-service/lib/common';
 import { ITextModel, ICodeEditor } from '@opensumi/ide-monaco';
 import { ICSSStyleService } from '@opensumi/ide-theme';
 
@@ -52,6 +55,9 @@ export class CollaborationService extends WithEventBus implements ICollaboration
   @Autowired(IEditorDocumentModelService)
   private docModelManager: IEditorDocumentModelService;
 
+  @Autowired(IFileServiceClient)
+  protected readonly fileServiceClient: IFileServiceClient;
+
   @Autowired(AppConfig)
   private appConfig: AppConfig;
 
@@ -61,11 +67,11 @@ export class CollaborationService extends WithEventBus implements ICollaboration
 
   private userInfo: UserInfo;
 
-  private yDoc: Y.Doc;
+  private yDoc: YDoc;
 
   private yWebSocketProvider: WebsocketProvider;
 
-  private yTextMap: Y.Map<Y.Text>;
+  private yTextMap: YMap<YText>;
 
   private bindingMap: Map<string, TextModelBinding> = new Map();
 
@@ -73,7 +79,9 @@ export class CollaborationService extends WithEventBus implements ICollaboration
 
   private bindingReadyMap: Map<string, Deferred<void>> = new Map();
 
-  private yMapObserver = (event: Y.YMapEvent<Y.Text>) => {
+  protected readonly toDisposableCollection: DisposableCollection = new DisposableCollection();
+
+  private yMapObserver = (event: YMapEvent<YText>) => {
     const changes = event.changes.keys;
     changes.forEach((change, key) => {
       if (change.action === 'add') {
@@ -95,16 +103,31 @@ export class CollaborationService extends WithEventBus implements ICollaboration
   }
 
   initialize() {
-    this.yDoc = new Y.Doc();
+    /**
+     * 优先使用 appConfig.collaborationWsPath 配置
+     * 如果没有该配置才根据 wsPath 去转换端口
+     */
+    const { collaborationWsPath, wsPath } = this.appConfig;
+    let serverUrl: string | undefined = collaborationWsPath;
+
+    if (!serverUrl) {
+      const path = new URL(wsPath.toString());
+      path.port = String(COLLABORATION_PORT);
+
+      serverUrl = path.toString();
+    }
+
+    this.yDoc = new YDoc();
     this.yTextMap = this.yDoc.getMap();
 
-    // transform url
-    const wsPath = new URL(this.appConfig.wsPath.toString());
-    wsPath.port = String(COLLABORATION_PORT);
-    this.yWebSocketProvider = new WebsocketProvider(wsPath.toString(), ROOM_NAME, this.yDoc);
+    this.yWebSocketProvider = new WebsocketProvider(serverUrl.toString(), ROOM_NAME, this.yDoc);
 
     this.yTextMap.observe(this.yMapObserver);
 
+    this.yWebSocketProvider.awareness.on('update', this.updateCSSManagerWhenAwarenessUpdated);
+  }
+
+  registerUserInfo() {
     if (this.userInfo === undefined) {
       // fallback
       this.userInfo = {
@@ -114,8 +137,14 @@ export class CollaborationService extends WithEventBus implements ICollaboration
     }
     // add userInfo to awareness field
     this.yWebSocketProvider.awareness.setLocalStateField('user-info', this.userInfo);
+  }
 
-    this.yWebSocketProvider.awareness.on('update', this.updateCSSManagerWhenAwarenessUpdated);
+  initFileWatch() {
+    this.toDisposableCollection.push(
+      this.fileServiceClient.onFilesChanged((e) => {
+        this.handleFileChange(e);
+      }),
+    );
   }
 
   destroy() {
@@ -128,6 +157,7 @@ export class CollaborationService extends WithEventBus implements ICollaboration
     this.yTextMap.unobserve(this.yMapObserver);
     this.yWebSocketProvider.disconnect();
     this.bindingMap.forEach((binding) => binding.destroy());
+    this.toDisposableCollection.dispose();
   }
 
   registerContribution(contribution: CollaborationModuleContribution) {
@@ -227,23 +257,24 @@ export class CollaborationService extends WithEventBus implements ICollaboration
     if (changes.added.length > 0) {
       changes.added.forEach((clientID) => {
         if (!this.clientIDStyleAddedSet.has(clientID)) {
-          const color = getColorByClientID(clientID);
+          const [foregroundColor, backgroundColor] = getColorByClientID(clientID);
           this.cssManager.addClass(`${Y_REMOTE_SELECTION}-${clientID}`, {
-            backgroundColor: color,
+            backgroundColor,
             opacity: '0.25',
+            color: foregroundColor,
           });
           this.cssManager.addClass(`${Y_REMOTE_SELECTION_HEAD}-${clientID}`, {
             position: 'absolute',
-            borderLeft: `${color} solid 2px`,
-            borderBottom: `${color} solid 2px`,
-            borderTop: `${color} solid 2px`,
+            borderLeft: `${backgroundColor} solid 2px`,
+            borderBottom: `${backgroundColor} solid 2px`,
+            borderTop: `${backgroundColor} solid 2px`,
             height: '100%',
             boxSizing: 'border-box',
           });
           this.cssManager.addClass(`${Y_REMOTE_SELECTION_HEAD}-${clientID}::after`, {
             position: 'absolute',
             content: ' ',
-            border: `3px solid ${color}`,
+            border: `3px solid ${backgroundColor}`,
             left: '-4px',
             top: '-5px',
           });
@@ -252,6 +283,16 @@ export class CollaborationService extends WithEventBus implements ICollaboration
       });
     }
   };
+
+  private handleFileChange(e: FileChangeEvent) {
+    e.forEach((change) => {
+      // 只有从文件系统更新，并且窗口未打开情况，才重置 yTextMap
+      if (change.type === FileChangeType.UPDATED && !this.bindingMap.get(change.uri) && this.yTextMap.get(change.uri)) {
+        this.yTextMap.delete(change.uri);
+        this.resetDeferredYMapKey(change.uri);
+      }
+    });
+  }
 
   @OnEvent(EditorDocumentModelCreationEvent)
   private async editorDocumentModelCreationHandler(e: EditorDocumentModelCreationEvent) {

@@ -1,14 +1,15 @@
 import classnames from 'classnames';
 import { observable } from 'mobx';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
+import React, { useCallback, useEffect, useRef, memo } from 'react';
 
 import { Injectable } from '@opensumi/di';
 import { Icon } from '@opensumi/ide-components';
+import { Scrollbars } from '@opensumi/ide-components';
 import { useInjectable, DomListener, Disposable, useUpdateOnEvent } from '@opensumi/ide-core-browser';
 import { getIcon } from '@opensumi/ide-core-browser';
-import { IScrollDelegate, Scroll } from '@opensumi/ide-core-browser/lib/components/scroll';
 
+import { BreadCrumbsMenuService } from './menu/breadcrumbs.menus';
 import styles from './navigation.module.less';
 import { IBreadCrumbService, IBreadCrumbPart } from './types';
 import { useUpdateOnGroupTabChange } from './view/react-hook';
@@ -47,21 +48,27 @@ export const NavigationBar = ({ editorGroup }: { editorGroup: EditorGroup }) => 
     return null;
   }
   return parts.length === 0 ? null : (
-    <div className={styles.navigation_container}>
+    <div
+      className={styles.navigation_container}
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
+    >
       {parts.map((p, i) => (
         <React.Fragment key={i + '-crumb:' + p.name}>
           {i > 0 && <Icon icon={'right'} size='small' className={styles.navigation_icon} />}
-          <NavigationItem part={p} />
+          <NavigationItem part={p} editorGroup={editorGroup} />
         </React.Fragment>
       ))}
     </div>
   );
 };
-export const NavigationItem = React.memo(({ part }: { part: IBreadCrumbPart }) => {
+export const NavigationItem = memo(({ part, editorGroup }: { part: IBreadCrumbPart; editorGroup: EditorGroup }) => {
   const viewService = useInjectable(NavigationBarViewService) as NavigationBarViewService;
-  const itemRef = React.useRef<HTMLSpanElement>();
+  const breadcrumbsMenuService = useInjectable(BreadCrumbsMenuService) as BreadCrumbsMenuService;
+  const itemRef = useRef<HTMLSpanElement>();
 
-  const onClick = React.useCallback(async () => {
+  const onClick = useCallback(async () => {
     if (part.getSiblings && itemRef.current) {
       const { left, top, height } = itemRef.current.getBoundingClientRect();
       const siblings = await part.getSiblings!();
@@ -70,12 +77,22 @@ export const NavigationItem = React.memo(({ part }: { part: IBreadCrumbPart }) =
         // 放左边
         leftPos = window.innerWidth - 200 - 5;
       }
-      viewService.showMenu(siblings.parts, leftPos, top + height + 5, siblings.currentIndex);
+      viewService.showMenu(siblings.parts, leftPos, top + height + 5, siblings.currentIndex, part.uri, editorGroup);
     }
   }, [itemRef.current, part]);
 
   return (
-    <span onClick={onClick} className={styles['navigation-part']} ref={itemRef as any}>
+    <span
+      onClick={onClick}
+      onContextMenu={(event) => {
+        if (!part.isSymbol && part.uri) {
+          breadcrumbsMenuService.show(event.nativeEvent.x, event.nativeEvent.y, editorGroup, part.uri);
+        }
+        event.preventDefault();
+      }}
+      className={styles['navigation-part']}
+      ref={itemRef as any}
+    >
       {part.icon && <span className={part.icon}></span>}
       <span>{part.name}</span>
     </span>
@@ -91,14 +108,22 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
     top = window.innerHeight - 20 - maxHeight;
   }
 
+  const scrollerContainer = useRef<HTMLDivElement | null>();
+
   const viewService = useInjectable(NavigationBarViewService) as NavigationBarViewService;
 
-  const onSetScrollDelegate = (delegate: IScrollDelegate) => {
-    delegate.scrollTo({
-      top: 22 * model.initialIndex - Math.min(maxHeight, height) * 0.5,
-      left: 0,
-    });
-  };
+  const scrollToCurrent = useCallback(() => {
+    if (scrollerContainer.current) {
+      try {
+        const current = scrollerContainer.current.querySelector(`.${styles.navigation_menu_item_current}`);
+        if (current) {
+          current.scrollIntoView({ behavior: 'auto', block: 'center' });
+        }
+      } catch (e) {
+        // noop
+      }
+    }
+  }, [scrollerContainer.current]);
 
   return (
     <div
@@ -110,7 +135,13 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
         height: height + 'px',
       }}
     >
-      <Scroll className={styles.navigation_menu_items} delegate={onSetScrollDelegate}>
+      <Scrollbars
+        className={styles.navigation_menu_items}
+        forwardedRef={(el) => {
+          scrollerContainer.current = el;
+          scrollToCurrent();
+        }}
+      >
         {model.parts.map((p, i) => {
           let itemRef: HTMLDivElement | null;
           const clickToGetChild = p.getChildren
@@ -122,7 +153,7 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
                     // 放左边
                     nextLeft = left - width - 5;
                   }
-                  model.showSubMenu(await p.getChildren!(), nextLeft, top);
+                  model.showSubMenu(await p.getChildren!(), nextLeft, top, model);
                 }
               }
             : undefined;
@@ -137,7 +168,7 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
             <div
               onClick={clickToNavigate || clickToGetChild}
               ref={(el) => (itemRef = el)}
-              className={classnames({
+              className={classnames(styles.navigation_menu_item, {
                 [styles.navigation_menu_item_current]: i === model.initialIndex,
               })}
               key={'menu-' + p.name}
@@ -163,7 +194,7 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
             </div>
           );
         })}
-      </Scroll>
+      </Scrollbars>
       {model.subMenu && <NavigationMenu model={model.subMenu} />}
     </div>
   );
@@ -171,9 +202,9 @@ export const NavigationMenu = observer(({ model }: { model: NavigationMenuModel 
 
 export const NavigationMenuContainer = observer(() => {
   const viewService = useInjectable(NavigationBarViewService) as NavigationBarViewService;
-  const menuRef = React.useRef<HTMLDivElement>();
+  const menuRef = useRef<HTMLDivElement>();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (menuRef.current) {
       const disposer = new Disposable();
       disposer.addDispose(
@@ -204,9 +235,11 @@ export const NavigationMenuContainer = observer(() => {
 @Injectable()
 export class NavigationBarViewService {
   @observable.ref current: NavigationMenuModel | undefined;
+  @observable.ref editorGroup: EditorGroup;
 
-  showMenu(parts: IBreadCrumbPart[], x, y, currentIndex) {
-    this.current = new NavigationMenuModel(parts, x, y, currentIndex);
+  showMenu(parts: IBreadCrumbPart[], x, y, currentIndex, uri, editorGroup) {
+    this.current = new NavigationMenuModel(parts, x, y, currentIndex, uri);
+    this.editorGroup = editorGroup;
   }
 
   dispose() {
@@ -225,10 +258,11 @@ export class NavigationMenuModel {
     public readonly x,
     public readonly y,
     public readonly initialIndex: number = -1,
+    public readonly uri,
   ) {}
 
-  showSubMenu(parts: IBreadCrumbPart[], x, y) {
-    this.subMenu = new NavigationMenuModel(parts, x, y);
+  showSubMenu(parts: IBreadCrumbPart[], x, y, uri) {
+    this.subMenu = new NavigationMenuModel(parts, x, y, -1, uri);
   }
 
   dispose() {

@@ -3,8 +3,6 @@ import net from 'net';
 import path from 'path';
 import util from 'util';
 
-import * as fs from 'fs-extra';
-
 import { Injectable, Autowired } from '@opensumi/di';
 import { WSChannel } from '@opensumi/ide-connection';
 import { WebSocketMessageReader, WebSocketMessageWriter } from '@opensumi/ide-connection/lib/common/message';
@@ -49,6 +47,7 @@ import {
   ICreateProcessOptions,
   KT_PROCESS_SOCK_OPTION_KEY,
   IExtensionNodeClientService,
+  CONNECTION_HANDLE_BETWEEN_EXTENSION_AND_MAIN_THREAD,
 } from '../common';
 
 import { ExtensionScanner } from './extension.scanner';
@@ -319,7 +318,6 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
 
       forkArgs.push(`--kt-process-preload=${preloadPath}`);
       if (this.appConfig.extHost) {
-        this.logger.log(`extension host path ${this.appConfig.extHost}`);
         extProcessPath = this.appConfig.extHost;
       } else {
         extProcessPath =
@@ -328,6 +326,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
             : path.join(__dirname, '../hosted/ext.process' + path.extname(module.filename));
       }
     }
+    this.logger.log(`Extension host process path ${extProcessPath}`);
 
     // 注意只能传递可以序列化的数据
     forkArgs.push(
@@ -344,7 +343,11 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
 
       const port = await this.extensionHostManager.findDebugPort(this.inspectPort, 10, 5000);
       forkOptions.execArgv.push('--nolazy');
-      forkOptions.execArgv.push(`--inspect=${port}`);
+      if (options?.inspectExtensionHost) {
+        forkOptions.execArgv.push(`--inspect=${options.inspectExtensionHost}:${port}`);
+      } else {
+        forkOptions.execArgv.push(`--inspect=${port}`);
+      }
       this.clientExtProcessInspectPortMap.set(clientId, port);
     }
 
@@ -353,7 +356,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
       ...forkOptions,
       ...this.appConfig.extHostForkOptions,
     });
-    this.logger.log('extProcess.pid', extProcessId);
+    this.logger.log(`Fork extension host process with id ${extProcessId}`);
 
     // 监听进程输出，用于获取调试端口
     this.extensionHostManager.onOutput(extProcessId, (output) => {
@@ -373,9 +376,8 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
     });
 
     this.extensionHostManager.onExit(extProcessId, async (code: number, signal: string) => {
-      this.logger.log('extProcess.pid exit', extProcessId, 'code', code, 'signal', signal);
+      this.logger.log(`Extension host process ${extProcessId} exit by code ${code} signal ${signal}`);
       if (this.clientExtProcessMap.get(clientId) === extProcessId) {
-        this.logger.error('extProcess crash', extProcessId, 'code', code, 'signal', signal);
         await this.disposeClientExtProcess(clientId, false, false);
         this.infoProcessCrash(clientId);
         this.reporterService.point(REPORT_NAME.EXTENSION_CRASH, clientId, {
@@ -383,12 +385,11 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
           signal,
         });
       } else {
-        this.logger.log('extProcess.pid exit by dispose', extProcessId);
+        this.logger.log(`Extension host process ${extProcessId} exit by dispose`);
       }
     });
 
     this.clientExtProcessMap.set(clientId, extProcessId);
-    this.logger.log('clientExtProcessMap.keys', this.clientExtProcessMap.keys());
     const extProcessInitDeferred = new Deferred<void>();
     this.clientExtProcessInitDeferredMap.set(clientId, extProcessInitDeferred);
 
@@ -408,7 +409,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
     const initHandler = (msg) => {
       if (msg === 'ready') {
         const duration = forkTimer.timeEnd();
-        this.logger.log(`extension,fork,${clientId},${duration}ms`);
+        this.logger.log(`Starting extension host with pid ${extProcessId} (fork() took ${duration} ms).`);
         this.clientExtProcessInitDeferredMap.get(clientId)?.resolve();
         this.clientExtProcessFinishDeferredMap.set(clientId, new Deferred<void>());
       } else if (msg === 'finish') {
@@ -446,7 +447,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
       try {
         (process as ProcessExt)._debugProcess!(extHostProcessId);
       } catch (err) {
-        this.logger.error(`enable inspect port error \n ${err.message}`);
+        this.logger.error(`Enable inspect port error \n ${err.message}`);
         return false;
       }
 
@@ -475,10 +476,10 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
       const clientId = process.env.CODE_WINDOW_CLIENT_ID as string;
       const mainThreadServer: net.Server = net.createServer();
       const mainThreadListenPath = await this.getElectronMainThreadListenPath2(clientId);
-      this.logger.log('mainThreadListenPath', mainThreadListenPath);
+      this.logger.log(`The electron mainThread listen on ${mainThreadListenPath}`);
 
       mainThreadServer.on('connection', (connection) => {
-        this.logger.log(`electron ext main connected ${clientId}`);
+        this.logger.log(`The electron mainThread ${clientId} connected`);
 
         handler({
           connection: {
@@ -489,19 +490,18 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
         });
 
         connection.on('close', () => {
-          this.logger.log('close disposeClientExtProcess clientId', clientId);
+          this.logger.log(`Dispose client by clientId ${clientId}`);
           // electron 只要端口进程就杀死插件进程
           this.disposeClientExtProcess(clientId);
         });
       });
 
       mainThreadServer.listen(mainThreadListenPath, () => {
-        this.logger.log(`electron mainThread listen on ${mainThreadListenPath}`);
+        this.logger.log(`Electron mainThread listen on ${mainThreadListenPath}`);
       });
     } else {
-      commonChannelPathHandler.register('ExtMainThreadConnection', {
+      commonChannelPathHandler.register(CONNECTION_HANDLE_BETWEEN_EXTENSION_AND_MAIN_THREAD, {
         handler: (connection: WSChannel, connectionClientId: string) => {
-          this.logger.log(`ext main connected ${connectionClientId}`);
           const reader = new WebSocketMessageReader(connection);
           const writer = new WebSocketMessageWriter(connection);
           handler({
@@ -515,7 +515,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
           connection.onClose(() => {
             reader.dispose();
             writer.dispose();
-            this.logger.log(`remove ext mainConnection ${connectionClientId} `);
+            this.logger.log(`The connection client ${connectionClientId} closed`);
 
             if (this.clientExtProcessExtConnection.has(connectionClientId)) {
               const extConnection: any = this.clientExtProcessExtConnection.get(connectionClientId);
@@ -530,10 +530,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
             this.closeExtProcessWhenConnectionClose(connectionClientId);
           });
         },
-        dispose: (connection, connectionClientId) => {
-          // Web 场景断连后不杀死插件进程
-          // https://yuque.antfin.com/ide-framework/topiclist/enpip1
-        },
+        dispose: () => {},
       });
     }
   }
@@ -544,9 +541,9 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
   private closeExtProcessWhenConnectionClose(connectionClientId: string) {
     if (this.clientExtProcessMap.has(connectionClientId)) {
       const timer = global.setTimeout(() => {
-        this.logger.log('close disposeClientExtProcess clientId', connectionClientId);
+        this.logger.log(`Dispose client by connectionClientId ${connectionClientId}`);
         this.disposeClientExtProcess(connectionClientId).catch((e) => {
-          this.logger.error('close extProcess when connection close throw error', e.message);
+          this.logger.error(`Close extension host process when connection throw error\n${e.message}`);
         });
       }, this.appConfig.processCloseExitThreshold ?? ExtensionNodeServiceImpl.ProcessCloseExitThreshold);
       this.clientExtProcessThresholdExitTimerMap.set(connectionClientId, timer);
@@ -561,8 +558,8 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
   }
 
   /**
-   * 如果插件进程已被销毁(比如ws连接断开超过 ProcessCloseExitThreshold)，那么当用户重新连接至服务时
-   * 需要通知重启整个插件进程
+   * 如果插件进程已被销毁，如 websocket 连接断开超过 `ExtensionNodeServiceImpl.ProcessCloseExitThreshold` 时
+   * 那么当用户重新连接至服务时，需要通知重启整个插件进程
    */
   private restartExtProcessByClient(clientId: string) {
     if (this.clientServiceMap.has(clientId)) {
@@ -591,7 +588,7 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
 
       // extServer 关闭
       if (this.clientExtProcessExtConnectionServer.has(clientId)) {
-        this.clientExtProcessExtConnectionServer.get(clientId)!.close();
+        this.clientExtProcessExtConnectionServer.get(clientId)?.close();
       }
       // connect 关闭
       if (this.clientExtProcessExtConnection.has(clientId)) {
@@ -607,13 +604,12 @@ export class ExtensionNodeServiceImpl implements IExtensionNodeService {
       this.clientExtProcessMap.delete(clientId);
 
       if (killProcess) {
-        await this.extensionHostManager.treeKill(extProcessId);
         await this.extensionHostManager.disposeProcess(extProcessId);
       }
       if (info) {
         this.infoProcessNotExist(clientId);
       }
-      this.logger.log(`${clientId} extProcess dispose`);
+      this.logger.log(`Extension host process disposed by clientId ${clientId}`);
     }
   }
 

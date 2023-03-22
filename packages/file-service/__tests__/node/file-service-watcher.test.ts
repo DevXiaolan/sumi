@@ -4,34 +4,37 @@ import temp from 'temp';
 import { URI, isMacintosh } from '@opensumi/ide-core-common';
 import { FileUri } from '@opensumi/ide-core-node';
 
-import { createBrowserInjector } from '../../../../tools/dev-tool/src/injector-helper';
+import { createNodeInjector } from '../../../../tools/dev-tool/src/injector-helper';
 import { MockInjector } from '../../../../tools/dev-tool/src/mock-injector';
 import { DidFilesChangedParams, FileChangeType } from '../../src/common';
-import { ParcelWatcherServer } from '../../src/node/file-service-watcher';
+import { FileSystemWatcherServer } from '../../src/node/file-service-watcher';
 
 function sleep(time: number) {
   return new Promise((resolve) => setTimeout(resolve, time));
 }
+const sleepTime = 1000;
 
 (isMacintosh ? describe.skip : describe)('ParceWatcher Test', () => {
   const track = temp.track();
-  const sleepTime = 500;
-  let injector: MockInjector;
-  let root: URI;
-  let watcherServer: ParcelWatcherServer;
-  let watcherId: number;
-  jest.setTimeout(10000);
+  const watcherServerList: FileSystemWatcherServer[] = [];
+  let seed = 1;
 
-  beforeEach(async () => {
-    injector = createBrowserInjector([]);
-    root = FileUri.create(await fse.realpath(await temp.mkdir('node-fs-root')));
-    watcherServer = injector.get(ParcelWatcherServer);
-    watcherId = await watcherServer.watchFileChanges(root.toString());
-  });
+  async function generateWatcher() {
+    const injector = createNodeInjector([]);
+    const root = FileUri.create(fse.realpathSync(await temp.mkdir(`parce-watcher-test-${seed++}`)));
+    // @ts-ignore
+    injector.mock(FileSystemWatcherServer, 'isEnableNSFW', () => false);
+    const watcherServer = injector.get(FileSystemWatcherServer);
+    const watcherId = await watcherServer.watchFileChanges(root.toString());
 
-  afterEach(async () => {
+    return { root, watcherServer, watcherId };
+  }
+
+  afterAll(async () => {
     track.cleanupSync();
-    watcherServer.dispose();
+    watcherServerList.forEach((watcherServer) => {
+      watcherServer.dispose();
+    });
   });
 
   it('Should receive file changes events from in the workspace by default.', async () => {
@@ -42,6 +45,8 @@ function sleep(time: number) {
         event.changes.forEach((c) => actualUris.add(c.uri.toString()));
       },
     };
+
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     const expectedUris = [
@@ -50,10 +55,10 @@ function sleep(time: number) {
       root.withPath(root.path.join('foo', 'bar', 'baz.txt')).toString(),
     ];
 
-    await fse.mkdir(FileUri.fsPath(root.resolve('foo')));
+    await fse.mkdir(FileUri.fsPath(root.resolve('foo')), { recursive: true });
     expect(fse.statSync(FileUri.fsPath(root.resolve('foo'))).isDirectory()).toBe(true);
 
-    await fse.mkdir(FileUri.fsPath(root.resolve('foo').resolve('bar')));
+    await fse.mkdir(FileUri.fsPath(root.resolve('foo').resolve('bar')), { recursive: true });
     expect(fse.statSync(FileUri.fsPath(root.resolve('foo').resolve('bar'))).isDirectory()).toBe(true);
 
     await fse.writeFile(FileUri.fsPath(root.resolve('foo').resolve('bar').resolve('baz.txt')), 'baz');
@@ -62,6 +67,8 @@ function sleep(time: number) {
     );
     await sleep(sleepTime);
     expect(expectedUris).toEqual(Array.from(actualUris));
+
+    watcherServerList.push(watcherServer);
   });
 
   it('Should not receive file changes events from in the workspace by default if unwatched', async () => {
@@ -72,16 +79,17 @@ function sleep(time: number) {
         event.changes.forEach((c) => actualUris.add(c.uri.toString()));
       },
     };
+    const { root, watcherServer, watcherId } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     /* Unwatch root */
     await watcherServer.unwatchFileChanges(watcherId);
 
-    fse.mkdirSync(FileUri.fsPath(root.resolve('foo')));
+    fse.mkdirSync(FileUri.fsPath(root.resolve('foo')), { recursive: true });
     expect(fse.statSync(FileUri.fsPath(root.resolve('foo'))).isDirectory()).toBe(true);
     await sleep(sleepTime);
 
-    fse.mkdirSync(FileUri.fsPath(root.resolve('foo').resolve('bar')));
+    fse.mkdirSync(FileUri.fsPath(root.resolve('foo').resolve('bar')), { recursive: true });
     expect(fse.statSync(FileUri.fsPath(root.resolve('foo').resolve('bar'))).isDirectory()).toBe(true);
     await sleep(sleepTime);
 
@@ -90,73 +98,91 @@ function sleep(time: number) {
       'baz',
     );
     await sleep(sleepTime);
-
     expect(actualUris.size).toEqual(0);
+
+    watcherServerList.push(watcherServer);
   });
 
   it('Merge common events on one watcher', async () => {
-    const newFolder = FileUri.fsPath(root.resolve('test'));
+    const { root, watcherServer, watcherId } = await generateWatcher();
+    const folderName = `folder_${seed}`;
+    const newFolder = FileUri.fsPath(root.resolve(folderName));
     expect(watcherId).toBeDefined();
-    fse.mkdirSync(newFolder);
+    fse.mkdirSync(newFolder, { recursive: true });
     const newWatcherId = await watcherServer.watchFileChanges(newFolder);
     expect(newWatcherId === watcherId).toBeTruthy();
+    watcherServerList.push(watcherServer);
   });
 
   it('Can receive events while watch file is not existed', async () => {
-    const newFolder = FileUri.fsPath(root.resolve('test'));
+    const { root, watcherServer, watcherId } = await generateWatcher();
+
+    const folderName = `folder_${seed}`;
+    const newFolder = FileUri.fsPath(root.resolve(folderName));
     expect(watcherId).toBeDefined();
-    fse.mkdirSync(newFolder);
+    fse.mkdirSync(newFolder, { recursive: true });
     const parentId = await watcherServer.watchFileChanges(newFolder);
-    const childFile = FileUri.fsPath(root.resolve('test').resolve('index.js'));
+    const childFile = FileUri.fsPath(root.resolve(folderName).resolve('index.js'));
     const childId = await watcherServer.watchFileChanges(childFile);
     expect(parentId === childId).toBeTruthy();
+    watcherServerList.push(watcherServer);
   });
 
   it('Excludes options should be worked', async () => {
     const watcherClient = {
       onDidFilesChanged: jest.fn(),
     };
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
-    const folder1 = FileUri.fsPath(root.resolve('folder1'));
-    const fileA = FileUri.fsPath(root.resolve('folder1').resolve('a'));
-    const fileB = FileUri.fsPath(root.resolve('folder1').resolve('b'));
-    fse.mkdirSync(folder1);
+
+    const folderName = `folder_${seed}`;
+    const newFolder = FileUri.fsPath(root.resolve(folderName));
+    const fileA = FileUri.fsPath(root.resolve(folderName).resolve('a'));
+    const fileB = FileUri.fsPath(root.resolve(folderName).resolve('b'));
+
+    fse.mkdirSync(newFolder, { recursive: true });
     await sleep(sleepTime);
     watcherClient.onDidFilesChanged.mockClear();
-    let id = await watcherServer.watchFileChanges(folder1, { excludes: [] });
+
+    let id = await watcherServer.watchFileChanges(newFolder, { excludes: [] });
     await fse.ensureFile(fileA);
     await sleep(sleepTime);
     expect(watcherClient.onDidFilesChanged).toBeCalledTimes(1);
     await watcherServer.unwatchFileChanges(id);
-    id = await watcherServer.watchFileChanges(folder1, { excludes: ['**/b/**'] });
+
+    id = await watcherServer.watchFileChanges(newFolder, { excludes: ['**/b/**'] });
     await fse.ensureFile(fileB);
     await sleep(sleepTime);
     expect(watcherClient.onDidFilesChanged).toBeCalledTimes(1);
-    watcherServer.unwatchFileChanges(id);
+    await watcherServer.unwatchFileChanges(id);
+    watcherServerList.push(watcherServer);
   });
 });
 
 (isMacintosh ? describe.skip : describe)('Watch file rename/move/new', () => {
   const track = temp.track();
-  const sleepTime = 500;
-  let root: URI;
-  let watcherServer: ParcelWatcherServer;
-  let injector: MockInjector;
-  jest.setTimeout(10000);
 
-  beforeEach(async () => {
-    injector = createBrowserInjector([]);
-    root = FileUri.create(fse.realpathSync(temp.mkdirSync('node-fs-root')));
+  async function generateWatcher() {
+    const injector = createNodeInjector([]);
+    const root = FileUri.create(fse.realpathSync(await temp.mkdir('nfsw-test')));
+    // @ts-ignore
+    injector.mock(FileSystemWatcherServer, 'isEnableNSFW', () => false);
+    const watcherServer = injector.get(FileSystemWatcherServer);
+
     fse.mkdirpSync(FileUri.fsPath(root.resolve('for_rename_folder')));
     fse.writeFileSync(FileUri.fsPath(root.resolve('for_rename')), 'rename');
-    watcherServer = injector.get(ParcelWatcherServer);
-    await watcherServer.watchFileChanges(root.toString());
-    await sleep(sleepTime);
-  });
 
-  afterEach(() => {
+    await watcherServer.watchFileChanges(root.toString());
+
+    return { root, watcherServer };
+  }
+  const watcherServerList: FileSystemWatcherServer[] = [];
+
+  afterAll(async () => {
     track.cleanupSync();
-    watcherServer.dispose();
+    watcherServerList.forEach((watcherServer) => {
+      watcherServer.dispose();
+    });
   });
 
   it('Rename file', async () => {
@@ -175,7 +201,7 @@ function sleep(time: number) {
         });
       },
     };
-
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     const expectedAddUris = [root.resolve('for_rename_renamed').toString()];
@@ -187,6 +213,7 @@ function sleep(time: number) {
 
     expect([...addUris]).toEqual(expectedAddUris);
     expect([...deleteUris]).toEqual(expectedDeleteUris);
+    watcherServerList.push(watcherServer);
   });
 
   it('Move file', async () => {
@@ -206,11 +233,12 @@ function sleep(time: number) {
       },
     };
 
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     const expectedAddUris = [root.resolve('for_rename_folder').resolve('for_rename').toString()];
-
     const expectedDeleteUris = [root.resolve('for_rename').toString()];
+
     await fse.move(
       FileUri.fsPath(root.resolve('for_rename')),
       FileUri.fsPath(root.resolve('for_rename_folder').resolve('for_rename')),
@@ -223,6 +251,7 @@ function sleep(time: number) {
 
     expect(Array.from(addUris)).toEqual(expectedAddUris);
     expect(Array.from(deleteUris)).toEqual(expectedDeleteUris);
+    watcherServerList.push(watcherServer);
   });
 
   it('Move file on current directry', async () => {
@@ -241,7 +270,7 @@ function sleep(time: number) {
         });
       },
     };
-
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     const expectedAddUris = [root.resolve('for_rename_1').toString()];
@@ -255,6 +284,7 @@ function sleep(time: number) {
 
     expect(Array.from(addUris)).toEqual(expectedAddUris);
     expect(Array.from(deleteUris)).toEqual(expectedDeleteUris);
+    watcherServerList.push(watcherServer);
   });
 
   it('New file', async () => {
@@ -273,7 +303,7 @@ function sleep(time: number) {
         });
       },
     };
-
+    const { root, watcherServer } = await generateWatcher();
     watcherServer.setClient(watcherClient);
 
     const expectedAddUris = [root.resolve('README.md').toString()];
@@ -285,5 +315,6 @@ function sleep(time: number) {
 
     expect(Array.from(addUris)).toEqual(expectedAddUris);
     expect(Array.from(deleteUris)).toEqual(expectedDeleteUris);
+    watcherServerList.push(watcherServer);
   });
 });

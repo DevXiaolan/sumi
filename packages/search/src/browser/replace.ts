@@ -1,15 +1,19 @@
 import { localize } from '@opensumi/ide-core-browser';
-import { MessageType, URI } from '@opensumi/ide-core-common';
+import { formatLocalize, MessageType, URI } from '@opensumi/ide-core-common';
+import { IEditorDocumentModelService } from '@opensumi/ide-editor/lib/browser';
 import { IDialogService, IMessageService } from '@opensumi/ide-overlay';
-import { IWorkspaceEditService } from '@opensumi/ide-workspace-edit';
+import { IResourceFileEdit, IResourceTextEdit, IWorkspaceEditService } from '@opensumi/ide-workspace-edit';
 import * as monaco from '@opensumi/monaco-editor-core/esm/vs/editor/editor.api';
 
 import { ContentSearchResult, ResultTotal } from '../common/';
 
 export async function replaceAll(
+  documentModelManager: IEditorDocumentModelService,
   workspaceEditService: IWorkspaceEditService,
   resultMap: Map<string, ContentSearchResult[]>,
   replaceText: string,
+  searchText: string,
+  isUseRegexp?: boolean,
   dialogService?: IDialogService,
   messageService?: IMessageService,
   insertResultTotal?: ResultTotal,
@@ -24,10 +28,12 @@ export async function replaceAll(
       [localize('search.replace.buttonOK')]: true,
     };
     const selection = await dialogService!.open(
-      localize('search.removeAll.occurrences.files.confirmation.message')
-        .replace('{1}', String(resultTotal!.fileNum))
-        .replace('{0}', String(resultTotal!.resultNum))
-        .replace('{2}', String(replaceText)),
+      formatLocalize(
+        'search.removeAll.occurrences.files.confirmation.message',
+        String(resultTotal.resultNum),
+        String(resultTotal.fileNum),
+        replaceText,
+      ),
       MessageType.Warning,
       Object.keys(buttons),
     );
@@ -37,14 +43,16 @@ export async function replaceAll(
   }
   for (const resultArray of resultMap) {
     const results = resultArray[1];
-    await replace(workspaceEditService, results, replaceText);
+    await replace(documentModelManager, workspaceEditService, results, replaceText, searchText, isUseRegexp);
   }
   if (messageService && resultTotal) {
     messageService.info(
-      localize('replaceAll.occurrences.files.message')
-        .replace('{1}', String(resultTotal.fileNum))
-        .replace('{0}', String(resultTotal.resultNum))
-        .replace('{2}', String(replaceText)),
+      formatLocalize(
+        'search.replaceAll.occurrencesMessage',
+        String(resultTotal.resultNum),
+        String(resultTotal.fileNum),
+        replaceText,
+      ),
     );
   }
   return true;
@@ -61,20 +69,51 @@ export function getSelection(result: ContentSearchResult) {
 }
 
 export async function replace(
+  documentModelManager: IEditorDocumentModelService,
   workspaceEditService: IWorkspaceEditService,
   results: ContentSearchResult[],
   replaceText: string,
+  searchText: string,
+  isUseRegexp?: boolean,
 ) {
-  await workspaceEditService.apply({
-    edits: results.map((result) => ({
+  const autoSavedDocs = results
+    .map((result) => documentModelManager.getModelReference(new URI(result.fileUri)))
+    .filter((doc) => doc?.instance && !doc.instance.dirty);
+
+  const edits: Array<IResourceFileEdit | IResourceTextEdit> = [];
+  for (const result of results) {
+    let replaceResult = replaceText;
+    if (isUseRegexp && replaceText) {
+      let regexp;
+      try {
+        regexp = new RegExp(searchText);
+      } catch (e) {
+        continue;
+      }
+      const matchLineText = result.renderLineText?.slice(
+        result.matchStart - 1,
+        result.matchStart + result.matchLength - 1,
+      );
+      if (matchLineText) {
+        replaceResult = matchLineText.replace(regexp, replaceText);
+      }
+    }
+    edits.push({
       options: {
         dirtyIfInEditor: true,
       },
       resource: new URI(result.fileUri),
       textEdit: {
         range: new monaco.Range(result.line, result.matchStart, result.line, result.matchStart + result.matchLength),
-        text: replaceText,
+        text: replaceResult,
       },
-    })),
+    });
+  }
+  await workspaceEditService.apply({
+    edits,
+  });
+
+  autoSavedDocs.forEach((doc) => {
+    doc!.instance.save();
   });
 }

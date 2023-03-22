@@ -4,6 +4,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import ReactIs from 'react-is';
 
+import { Scrollbars } from '@opensumi/ide-components';
 import {
   AppConfig,
   ComponentRegistry,
@@ -23,11 +24,10 @@ import {
   ResizeHandleHorizontal,
   ResizeHandleVertical,
 } from '@opensumi/ide-core-browser/lib/components';
-import { Scroll } from '@opensumi/ide-core-browser/lib/components/scroll';
 import { VIEW_CONTAINERS } from '@opensumi/ide-core-browser/lib/layout/view-id';
 import { useInjectable } from '@opensumi/ide-core-browser/lib/react-hooks';
 
-import { IEditorOpenType, IResource, WorkbenchEditorService } from '../common';
+import { IResource, WorkbenchEditorService } from '../common';
 
 import { EditorComponentRegistryImpl } from './component';
 import styles from './editor.module.less';
@@ -44,6 +44,7 @@ import {
   EditorSide,
   IEditorComponent,
   CodeEditorDidVisibleEvent,
+  EditorOpenType,
 } from './types';
 import { EditorGroup, WorkbenchEditorServiceImpl } from './workbench-editor.service';
 
@@ -213,7 +214,6 @@ export const EditorGridView = ({ grid }: { grid: EditorGrid }) => {
 };
 
 const cachedEditor: { [key: string]: HTMLDivElement } = {};
-const cachedDiffEditor: { [key: string]: HTMLDivElement } = {};
 
 /**
  * 默认的 editor empty component
@@ -326,6 +326,7 @@ export const EditorGroupBody = observer(({ group }: { group: EditorGroup }) => {
   const components: React.ReactNode[] = [];
   const codeEditorRef = React.useRef<HTMLDivElement>(null);
   const diffEditorRef = React.useRef<HTMLDivElement>(null);
+  const mergeEditorRef = React.useRef<HTMLDivElement>(null);
   const [, updateState] = React.useState<any>();
   const forceUpdate = React.useCallback(() => updateState({}), []);
 
@@ -341,18 +342,14 @@ export const EditorGroupBody = observer(({ group }: { group: EditorGroup }) => {
         group.createEditor(container);
       }
     }
+
     if (diffEditorRef.current) {
-      if (cachedDiffEditor[group.name]) {
-        cachedDiffEditor[group.name].remove();
-        diffEditorRef.current.appendChild(cachedDiffEditor[group.name]);
-      } else {
-        const container = document.createElement('div');
-        diffEditorRef.current.appendChild(container);
-        cachedDiffEditor[group.name] = container;
-        group.createDiffEditor(container);
-      }
+      group.attachDiffEditorDom(diffEditorRef.current);
     }
-  }, [codeEditorRef.current]);
+    if (mergeEditorRef.current) {
+      group.attachMergeEditorDom(mergeEditorRef.current);
+    }
+  }, [codeEditorRef.current, diffEditorRef.current, mergeEditorRef.current]);
 
   useDisposable(
     () =>
@@ -388,19 +385,19 @@ export const EditorGroupBody = observer(({ group }: { group: EditorGroup }) => {
   );
 
   React.useEffect(() => {
-    if (group.currentOpenType?.type === 'code') {
+    if (group.currentOpenType?.type === EditorOpenType.code) {
       eventBus.fire(
         new CodeEditorDidVisibleEvent({
           groupName: group.name,
-          type: 'code',
+          type: EditorOpenType.code,
           editorId: group.codeEditor.getId(),
         }),
       );
-    } else if (group.currentOpenType?.type === 'diff') {
+    } else if (group.currentOpenType?.type === EditorOpenType.diff) {
       eventBus.fire(
         new CodeEditorDidVisibleEvent({
           groupName: group.name,
-          type: 'diff',
+          type: EditorOpenType.diff,
           editorId: group.diffEditor.modifiedEditor.getId(),
         }),
       );
@@ -452,7 +449,7 @@ export const EditorGroupBody = observer(({ group }: { group: EditorGroup }) => {
         <div
           className={classnames({
             [styles.kt_editor_component]: true,
-            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== 'component',
+            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== EditorOpenType.component,
           })}
         >
           {components}
@@ -461,15 +458,21 @@ export const EditorGroupBody = observer(({ group }: { group: EditorGroup }) => {
           className={classnames({
             [styles.kt_editor_code_editor]: true,
             [styles.kt_editor_component]: true,
-            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== 'code',
+            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== EditorOpenType.code,
           })}
           ref={codeEditorRef}
         />
         <div
           className={classnames(styles.kt_editor_diff_editor, styles.kt_editor_component, {
-            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== 'diff',
+            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== EditorOpenType.diff,
           })}
           ref={diffEditorRef}
+        />
+        <div
+          className={classnames(styles.kt_editor_diff_3_editor, styles.kt_editor_component, {
+            [styles.kt_hidden]: !group.currentOpenType || group.currentOpenType.type !== EditorOpenType.mergeEditor,
+          })}
+          ref={mergeEditorRef}
         />
       </div>
       {group.currentResource && <EditorSideView side={'bottom'} resource={group.currentResource}></EditorSideView>}
@@ -534,7 +537,7 @@ export const ComponentWrapper = ({ component, resource, hidden, ...other }) => {
         [styles.kt_hidden]: hidden,
       })}
     >
-      <Scroll>
+      <Scrollbars>
         <ErrorBoundary>
           <div
             ref={(el) => {
@@ -545,7 +548,7 @@ export const ComponentWrapper = ({ component, resource, hidden, ...other }) => {
             {componentNode}
           </div>
         </ErrorBoundary>
-      </Scroll>
+      </Scrollbars>
     </div>
   );
 };
@@ -613,7 +616,7 @@ const EditorSideView = ({ side, resource }: { side: EditorSide; resource: IResou
     <div className={classnames(styles['kt_editor_side_widgets'], styles['kt_editor_side_widgets_' + side])}>
       {widgets.map((widget) => {
         const C = widget.component;
-        return <C resource={resource} key={widget.id} {...widget.initialProps}></C>;
+        return <C resource={resource} key={widget.id} {...(widget.initialProps || {})}></C>;
       })}
     </div>
   );

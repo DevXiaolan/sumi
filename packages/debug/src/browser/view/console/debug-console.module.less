@@ -46,6 +46,10 @@
     flex-shrink: 0;
     justify-content: center;
     font-weight: 600;
+    :global(.kaitian-icon) {
+      font-size: 14px;
+      line-height: @debug-console-default-height;
+    }
   }
 }
 
@@ -136,8 +140,6 @@
   &.mod_focused {
     outline: 1px solid var(--list-focusOutline);
     outline-offset: -1px;
-    color: var(--kt-tree-activeSelectionForeground) !important;
-    background: var(--kt-tree-activeSelectionBackground);
     .expansion_toggle {
       color: var(--kt-tree-activeSelectionForeground) !important;
     }
@@ -180,7 +182,7 @@
   color: inherit;
 }
 
-.debug_console_node_display_name {
+.debug_console_node_displayname {
   display: inline;
   white-space: inherit;
   &.info {
@@ -201,6 +203,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  color: var(--foreground);
 }
 
 .expansion_toggle {
